@@ -7,11 +7,10 @@ title: Incus Caddy Config
 leafwiki_id: frWCDE_vR
 leafwiki_title: Incus Caddy Config
 leafwiki_created_at: "2026-09-15T22:05:21Z"
-leafwiki_updated_at: "2026-09-15T22:11:28.269922752Z"
+leafwiki_updated_at: "2026-09-15T22:23:42.502291694Z"
 leafwiki_creator_id: system
 leafwiki_last_author_id: zyZjvP_vg
 ---
-
 # Incus Caddy Config
 
 Dynamic, zero-touch reverse proxy configuration for [Caddy](https://caddyserver.com/) on [Incus](https://linuxcontainers.org/incus/), driven by instance lifecycle events.
@@ -22,7 +21,7 @@ Dynamic, zero-touch reverse proxy configuration for [Caddy](https://caddyserver.
 flowchart TD
     Incus["Incus API (Events & Control)"] -->|instance events| Chain["ievent Chain<br/>(source &rarr; debounce &rarr; enricher)"]
     Chain --> Plugin["caddy-config Plugin"]
-    
+
     subgraph Storage["Incus Storage Pool"]
         Vol[("custom/caddy-config volume<br/>mounted at /config")]
     end
