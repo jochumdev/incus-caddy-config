@@ -69,7 +69,7 @@ dockers_v2:
     build_args:
       VERSION: "{{ .Version }}"
     images:
-      - "ghcr.io/lxc/incus-caddy-config"
+      - "ghcr.io/jochumdev/incus-caddy-config/caddy-config"
     tags:
       - "{{ .Version }}"
       - "latest"
