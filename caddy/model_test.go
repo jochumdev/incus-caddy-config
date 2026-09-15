@@ -34,6 +34,52 @@ func TestParseTarget(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseOSTarget(t *testing.T) {
+	// Bare path defaults to label "caddy".
+	target, err := ParseOSTarget("/etc/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, OSTarget{Label: "caddy", Path: "/etc/caddy/Caddyfile"}, target)
+
+	// Explicit label prefix.
+	target, err = ParseOSTarget("edge:/etc/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, OSTarget{Label: "edge", Path: "/etc/caddy/Caddyfile"}, target)
+
+	// Whitespace trimming.
+	target, err = ParseOSTarget("  myedge : /var/caddy/Caddyfile  ")
+	require.NoError(t, err)
+	require.Equal(t, OSTarget{Label: "myedge", Path: "/var/caddy/Caddyfile"}, target)
+
+	// Windows drive letter without label prefix.
+	target, err = ParseOSTarget(`C:\caddy\Caddyfile`)
+	require.NoError(t, err)
+	require.Equal(t, OSTarget{Label: "caddy", Path: `C:\caddy\Caddyfile`}, target)
+
+	// Windows drive letter with forward slash.
+	target, err = ParseOSTarget("D:/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, OSTarget{Label: "caddy", Path: "D:/caddy/Caddyfile"}, target)
+
+	// Windows drive letter with explicit label prefix.
+	target, err = ParseOSTarget(`edge:C:\caddy\Caddyfile`)
+	require.NoError(t, err)
+	require.Equal(t, OSTarget{Label: "edge", Path: `C:\caddy\Caddyfile`}, target)
+
+	// Invalid empty target.
+	_, err = ParseOSTarget("")
+	require.Error(t, err)
+
+	_, err = ParseOSTarget("   ")
+	require.Error(t, err)
+
+	// Invalid empty path.
+	_, err = ParseOSTarget("edge:")
+	require.Error(t, err)
+
+	_, err = ParseOSTarget(":")
+	require.Error(t, err)
+}
+
 func TestExtractVhosts(t *testing.T) {
 	ifaces1 := []iutil.InstanceInterface{
 		iutil.NewInstanceInterface("default", "incusbr0", true, []string{"10.0.1.5"}, nil),

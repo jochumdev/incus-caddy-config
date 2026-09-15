@@ -30,6 +30,42 @@ func ParseTarget(s string) (Target, error) {
 	}, nil
 }
 
+// OSTarget represents a local filesystem Caddyfile target on the same host or container.
+type OSTarget struct {
+	Label string
+	Path  string
+}
+
+// ParseOSTarget parses a "[label:]path" specification, defaulting to label "caddy" if omitted.
+func ParseOSTarget(s string) (OSTarget, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return OSTarget{}, fmt.Errorf("empty OS target")
+	}
+
+	idx := strings.Index(s, ":")
+	if idx == -1 {
+		return OSTarget{Label: "caddy", Path: s}, nil
+	}
+
+	// Windows drive letter check (e.g. C:\... or C:/...)
+	if idx == 1 && len(s) > 2 && (s[2] == '\\' || s[2] == '/') && ((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z')) {
+		return OSTarget{Label: "caddy", Path: s}, nil
+	}
+
+	label := strings.TrimSpace(s[:idx])
+	path := strings.TrimSpace(s[idx+1:])
+	if label == "" {
+		label = "caddy"
+	}
+
+	if path == "" {
+		return OSTarget{}, fmt.Errorf("invalid OS target %q: empty path", s)
+	}
+
+	return OSTarget{Label: label, Path: path}, nil
+}
+
 // vhost holds the model data needed to render a Caddyfile site block.
 type vhost struct {
 	Domain    string

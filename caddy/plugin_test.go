@@ -4,6 +4,9 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -299,4 +302,67 @@ func TestPluginHasTargetLabels(t *testing.T) {
 		"user.label.web.domain": "site.lan",
 	}, nil, nil)
 	require.True(t, p.hasTargetLabels(instMatch))
+
+	// Match via OSTargets.
+	pOS := New(nil, Config{
+		OSTargets: []OSTarget{
+			{Label: "local", Path: "/etc/caddy/Caddyfile"},
+		},
+	})
+	instOSMatch := iutil.NewInstance(true, map[string]string{
+		"user.label.local.domain": "local.lan",
+	}, nil, nil)
+	require.True(t, pOS.hasTargetLabels(instOSMatch))
+}
+
+func TestPluginReconcileOSTarget(t *testing.T) {
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+
+	execCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "sh", "-c", "exit 0")
+	}
+
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "Caddyfile")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	p := New(logger, Config{
+		OSTargets: []OSTarget{
+			{Label: "edge", Path: targetPath},
+		},
+	})
+
+	now := time.Now()
+	inst := iutil.NewInstance(true, map[string]string{
+		"user.label.edge.domain": "app.test",
+	}, nil, nil)
+	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst, true)
+
+	ctx := context.Background()
+	p.reconcile(ctx)
+
+	data, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "app.test")
+
+	// Reconcile again with same data: skipped via SHA cache.
+	p.reconcile(ctx)
+
+	// Reconcile with broken template: handles error gracefully.
+	brokenPath := filepath.Join(tmpDir, "BrokenCaddyfile")
+	pBroken := New(logger, Config{
+		OSTargets: []OSTarget{
+			{Label: "bad", Path: brokenPath},
+		},
+	})
+	badInst := iutil.NewInstance(true, map[string]string{
+		"user.label.bad.domain":   "bad.test",
+		"user.label.bad.template": "{{ .Unclosed",
+	}, nil, nil)
+	pBroken.instances["default/bad"] = iutil.NewEvent(now, "instance-started", "default", "bad", "").WithInstance(badInst, true)
+	pBroken.reconcile(ctx)
+
+	_, err = os.Stat(brokenPath)
+	require.True(t, os.IsNotExist(err))
 }

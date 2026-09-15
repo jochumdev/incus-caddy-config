@@ -110,6 +110,14 @@ sequenceDiagram
 4. **Validation Isolation**:
    If an invalid route or template syntax error occurs, validation fails in-container. The temporary file is removed, and the active `Caddyfile` remains completely untouched.
 
+### Co-located OS Deployment (`--os-path`)
+
+When `caddy-config` runs alongside Caddy on the same host, container, or VM:
+- **Filesystem Staging**: Writes directly to `.<base>.tmp` in the target directory and atomically swaps via `os.Rename`.
+- **Local Validation**: Executes `caddy validate --config <staging> --adapter caddyfile` on the local machine.
+- **Local Reload**: Executes `caddy reload --config <path> --adapter caddyfile`. If the Caddy daemon is offline during boot, the file remains deployed on disk for Caddy's startup.
+- **Unified Event Pipeline**: Reconciles alongside remote `--caddy-instance` targets within the exact same single-goroutine loop.
+
 ---
 
 ## Concurrency Model: Single Goroutine Confinement (Rule A4)

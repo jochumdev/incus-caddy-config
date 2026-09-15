@@ -40,6 +40,8 @@ func TestRunCommandFlags(t *testing.T) {
 		"--project", "alpha",
 		"--project", "beta",
 		"--caddy-instance", "external:default:caddy-prod",
+		"--os-path", "/etc/caddy/Caddyfile",
+		"--os-path", "edge:/var/caddy/Caddyfile",
 		"--caddyfile-path", "/etc/caddy/Caddyfile",
 		"--custom-templates-dir", "/etc/caddy/templates",
 		"--debounce-window", "500ms",
@@ -66,6 +68,7 @@ func TestRunCommandFlags(t *testing.T) {
 	require.True(t, cfg.Restricted)
 	require.Equal(t, []string{"alpha", "beta"}, cfg.Projects)
 	require.Equal(t, []string{"external:default:caddy-prod"}, cfg.CaddyInstances)
+	require.Equal(t, []string{"/etc/caddy/Caddyfile", "edge:/var/caddy/Caddyfile"}, cfg.OSTargets)
 	require.Equal(t, "/etc/caddy/Caddyfile", cfg.CaddyfilePath)
 	require.Equal(t, "/etc/caddy/templates", cfg.CustomTemplatesDir)
 	require.Equal(t, 500*time.Millisecond, cfg.DebounceWindow)
@@ -140,9 +143,9 @@ func TestRunCommandValidationFailure(t *testing.T) {
 	cfg := newConfig()
 	cmd := runCommand(cfg)
 
-	// Running without --caddy-instance must fail validation.
+	// Running without --caddy-instance or --os-path must fail validation.
 	err := cmd.Run(context.Background(), []string{"run"})
-	require.ErrorContains(t, err, "at least one --caddy-instance must be specified")
+	require.ErrorContains(t, err, "at least one --caddy-instance or --os-path must be specified")
 }
 
 func TestMainAction(t *testing.T) {

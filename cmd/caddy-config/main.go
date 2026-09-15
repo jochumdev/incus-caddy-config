@@ -120,6 +120,12 @@ func runCommand(cfg *config) *cli.Command {
 				Destination: &cfg.CaddyInstances,
 				Sources:     cli.EnvVars("INCUS_CADDY_INSTANCES"),
 			},
+			&cli.StringSliceFlag{
+				Name:        "os-path",
+				Usage:       "Target local Caddyfile in format '[label:]path'; can be repeated",
+				Destination: &cfg.OSTargets,
+				Sources:     cli.EnvVars("INCUS_CADDY_OS_PATH"),
+			},
 			&cli.StringFlag{
 				Name:        "caddyfile-path",
 				Usage:       "Path to Caddyfile inside Caddy container",
@@ -243,6 +249,7 @@ func mainAction(ctx context.Context, args *mainActionArgs) error {
 	logger.Debug("configuration",
 		"projects", args.Projects,
 		"targets", args.Targets,
+		"os_targets", args.OSTargets,
 		"data_dir", args.DataDir,
 		"secrets_dir", args.SecretsDir,
 		"token", args.redactedToken(),

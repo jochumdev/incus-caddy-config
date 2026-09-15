@@ -34,6 +34,7 @@ Every flag maps to exactly **one canonical environment variable** prefixed with 
 | `--use-remote` | `INCUS_CADDY_USE_REMOTE` | `false` | Allow Incus CLI configuration files (`~/.config/incus`) to be used. |
 | `--project` | `INCUS_CADDY_PROJECTS` | | Monitored Incus project(s). Can be repeated. If empty, monitors all visible projects. |
 | `--caddy-instance` | `INCUS_CADDY_INSTANCES` | | Target Caddy server specification in `label:project:instance` format (repeatable). |
+| `--os-path` | `INCUS_CADDY_OS_PATH` | | Target local Caddyfile in `[label:]path` format (repeatable). Defaults label to `caddy`. |
 | `--caddyfile-path` | `INCUS_CADDY_CADDYFILE_PATH` | `/config/Caddyfile` | Path to the active Caddyfile inside the Caddy container. |
 | `--custom-templates-dir` | `INCUS_CADDY_CUSTOM_TEMPLATES_DIR` | | Local path to directory containing custom vhost templates. |
 | `--debounce-window` | `INCUS_CADDY_DEBOUNCE_WINDOW` | `250ms` | Quiet period before flushing burst events to avoid redundant reloads. |
@@ -45,6 +46,44 @@ Every flag maps to exactly **one canonical environment variable** prefixed with 
 | `--read-timeout` | `INCUS_CADDY_READ_TIMEOUT` | `10s` | Timeout budget for a single instance read from the Incus daemon. |
 | `--sweep-project-delay` | `INCUS_CADDY_SWEEP_PROJECT_DELAY` | `30s` | Delay between consecutive sweeps across projects. |
 | `--sweep-read-delay` | `INCUS_CADDY_SWEEP_READ_DELAY` | `5s` | Delay between reads within a single project sweep. |
+
+---
+
+## Deployment Target Modes
+
+`caddy-config` supports two target deployment models:
+
+### 1. Remote Incus Instance (`--caddy-instance`)
+
+Used when Caddy runs in an isolated Incus container or VM. Configuration is deployed over Incus SFTP directly into the underlying storage volume (or container rootfs) and validated/reloaded via `incus exec`:
+
+```bash
+caddy-config run \
+  --caddy-instance edge:default:caddy \
+  --caddyfile-path /config/Caddyfile
+```
+
+### 2. Local OS / Co-located Deployment (`--os-path`)
+
+Used when `caddy-config` runs alongside Caddy on the same host, container, or VM:
+
+```bash
+# Default label prefix "caddy" -> /etc/caddy/Caddyfile
+caddy-config run --os-path /etc/caddy/Caddyfile
+
+# Custom label prefix "edge"
+caddy-config run --os-path edge:/etc/caddy/Caddyfile
+
+# Multiple local targets
+caddy-config run \
+  --os-path public:/etc/caddy/Caddyfile \
+  --os-path internal:/etc/caddy/internal.caddyfile
+```
+
+In this mode:
+- Staging writes to `.<base>.tmp` and atomically swaps using `os.Rename`.
+- Configuration syntax is validated locally via `caddy validate --config <staging> --adapter caddyfile`.
+- Caddy is reloaded locally via `caddy reload --config <path> --adapter caddyfile`. If Caddy is not currently running, the validated file remains on disk for Caddy to use upon startup.
 
 ---
 

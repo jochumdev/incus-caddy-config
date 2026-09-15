@@ -63,6 +63,7 @@ func chain(logger *slog.Logger, args *mainActionArgs) []position {
 			logger,
 			caddy.Config{
 				Targets:            args.Targets,
+				OSTargets:          args.OSTargets,
 				CaddyfilePath:      args.CaddyfilePath,
 				CustomTemplatesDir: args.CustomTemplatesDir,
 			},

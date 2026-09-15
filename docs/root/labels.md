@@ -19,21 +19,26 @@ leafwiki_last_author_id: system
 
 ## Target Binding Syntax
 
-`caddy-config` connects a label prefix to a target Caddy container using the `--caddy-instance` flag:
+`caddy-config` connects a label prefix to a target Caddy server using `--caddy-instance` (for Incus containers/VMs) or `--os-path` (for local OS deployment):
 
 ```text
 --caddy-instance <label>:<project>:<instance>
+--os-path [<label>:]<path>
 ```
 
 For example:
 ```bash
+# Remote Incus instance
 --caddy-instance edge:default:caddy-prod
-```
-- `<label>`: The label prefix to monitor (`edge`).
-- `<project>`: The Incus project containing the Caddy container (`default`).
-- `<instance>`: The target Caddy instance name (`caddy-prod`).
 
-You can specify `--caddy-instance` multiple times to route different subsets of services to distinct Caddy servers.
+# Local OS Caddyfile (defaults to label "caddy")
+--os-path /etc/caddy/Caddyfile
+
+# Local OS Caddyfile with custom label prefix
+--os-path edge:/etc/caddy/Caddyfile
+```
+
+You can specify `--caddy-instance` and `--os-path` multiple times to route different subsets of services to distinct Caddy targets.
 
 ---
 

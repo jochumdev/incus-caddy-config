@@ -19,6 +19,7 @@ const defaultInboxSize = 256
 // Config configures the Caddy event plugin.
 type Config struct {
 	Targets            []Target
+	OSTargets          []OSTarget
 	CaddyfilePath      string
 	CustomTemplatesDir string
 	InboxSize          int
@@ -204,6 +205,15 @@ func (p *Plugin) hasTargetLabels(inst *iutil.Instance) bool {
 		}
 	}
 
+	for _, target := range p.cfg.OSTargets {
+		prefix := "user.label." + target.Label + "."
+		for k := range inst.Config() {
+			if strings.HasPrefix(k, prefix) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
@@ -249,6 +259,34 @@ func (p *Plugin) reconcile(ctx context.Context) {
 		err = deploy(ctx, p.logger, p.conn, target, p.cfg.CaddyfilePath, content)
 		if err != nil {
 			p.logger.Error("deploying Caddyfile", "target", targetKey, "label", target.Label, "err", err)
+
+			continue
+		}
+
+		p.lastDeployed[targetKey] = sum[:]
+	}
+
+	for _, target := range p.cfg.OSTargets {
+		vhosts := extractVhosts(target.Label, instances)
+
+		content, err := render(vhosts, p.cfg.CustomTemplatesDir)
+		if err != nil {
+			p.logger.Error("rendering Caddyfile for OS target", "label", target.Label, "path", target.Path, "err", err)
+
+			continue
+		}
+
+		sum := sha256.Sum256(content)
+		targetKey := "os:" + target.Label + ":" + target.Path
+
+		last := p.lastDeployed[targetKey]
+		if bytes.Equal(last, sum[:]) {
+			continue
+		}
+
+		err = deployOS(ctx, p.logger, target, content)
+		if err != nil {
+			p.logger.Error("deploying Caddyfile to OS path", "label", target.Label, "path", target.Path, "err", err)
 
 			continue
 		}

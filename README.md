@@ -73,6 +73,7 @@ flowchart TD
 
 ## Features
 
+- **Dual Deployment Modes**: Supports deploying to remote Caddy instances in Incus over SFTP (`--caddy-instance label:project:instance`), or local filesystem deployment alongside Caddy on the same OS, container, or VM (`--os-path [label:]path`).
 - **Zero Admin Port Exposure**: Caddy's Admin API listens strictly on container loopback (`localhost:2019`). No admin port is published to the host or exposed to the network.
 - **Direct Storage Volume SFTP**: Writes directly to the underlying storage volume over the Incus API. `caddy-config` needs no local volume mount or host filesystem access.
 - **Single Goroutine Concurrency**: Concurrency model strictly confined to a single goroutine (Rule A4). Zero mutexes, race-free event processing, and orderly reconciliation.
@@ -180,7 +181,7 @@ curl -H "Host: web.example.test" http://127.0.0.1/
 
 ## Instance Labels Reference
 
-For a target bound to prefix `edge` (`--caddy-instance edge:default:caddy`):
+For a target bound to prefix `edge` (`--caddy-instance edge:default:caddy` or `--os-path edge:/etc/caddy/Caddyfile`):
 
 | Label in `compose.yaml` | Description                                                                                    |
 | ----------------------- | ---------------------------------------------------------------------------------------------- |

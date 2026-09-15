@@ -66,7 +66,7 @@ services:
       exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
   caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:v1.0.0-beta.1
+    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
     restart: unless-stopped
     ports:
       - "9153:9153"
@@ -147,6 +147,21 @@ curl -H "Host: api.example.test" http://127.0.0.1/
 ```bash
 curl -i http://localhost:9153/ready
 ```
+
+---
+
+## Alternative: Co-located Deployment on Host or VM
+
+If you run Caddy directly on the host OS or inside a VM alongside `caddy-config`, use `--os-path` instead of `--caddy-instance`:
+
+```bash
+# Listen to Incus and update local Caddyfile directly
+caddy-config run \
+  --os-path edge:/etc/caddy/Caddyfile \
+  --remote default
+```
+
+`caddy-config` validates the syntax and reloads the local Caddy daemon directly on the host filesystem.
 
 ---
 

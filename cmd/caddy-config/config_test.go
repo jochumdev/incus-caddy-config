@@ -19,14 +19,31 @@ func TestConfigDefaults(t *testing.T) {
 func TestConfigValidate(t *testing.T) {
 	cfg := newConfig()
 	_, err := cfg.validate()
-	require.ErrorContains(t, err, "at least one --caddy-instance must be specified")
+	require.ErrorContains(t, err, "at least one --caddy-instance or --os-path must be specified")
 
 	cfg.CaddyInstances = []string{"invalid-target"}
 	_, err = cfg.validate()
 	require.ErrorContains(t, err, "invalid --caddy-instance")
 
-	cfg.CaddyInstances = []string{"external:default:caddy-prod", "internal:infra:caddy-dev"}
+	cfg.CaddyInstances = nil
+	cfg.OSTargets = []string{"edge:"}
+	_, err = cfg.validate()
+	require.ErrorContains(t, err, "invalid --os-path")
+
+	// Valid OS target with bare path and explicit prefix.
+	cfg.OSTargets = []string{"/etc/caddy/Caddyfile", "custom:/var/caddy/Caddyfile"}
 	args, err := cfg.validate()
+	require.NoError(t, err)
+	require.Empty(t, args.Targets)
+	require.Len(t, args.OSTargets, 2)
+	require.Equal(t, "caddy", args.OSTargets[0].Label)
+	require.Equal(t, "/etc/caddy/Caddyfile", args.OSTargets[0].Path)
+	require.Equal(t, "custom", args.OSTargets[1].Label)
+	require.Equal(t, "/var/caddy/Caddyfile", args.OSTargets[1].Path)
+
+	// Both CaddyInstances and OSTargets.
+	cfg.CaddyInstances = []string{"external:default:caddy-prod", "internal:infra:caddy-dev"}
+	args, err = cfg.validate()
 	require.NoError(t, err)
 	require.Len(t, args.Targets, 2)
 	require.Equal(t, "external", args.Targets[0].Label)
@@ -35,6 +52,7 @@ func TestConfigValidate(t *testing.T) {
 	require.Equal(t, "internal", args.Targets[1].Label)
 	require.Equal(t, "infra", args.Targets[1].Project)
 	require.Equal(t, "caddy-dev", args.Targets[1].Instance)
+	require.Len(t, args.OSTargets, 2)
 }
 
 func TestConfigEndpoint(t *testing.T) {
