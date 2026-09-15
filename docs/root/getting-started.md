@@ -2,13 +2,14 @@
 description: Quickstart guide to running Caddy and caddy-config on Incus with automated reverse proxying.
 editor: markdown
 published: true
+tags: []
 title: Getting Started
 leafwiki_id: drZjvElvg
 leafwiki_title: Getting Started
 leafwiki_created_at: "2026-09-15T22:05:21Z"
-leafwiki_updated_at: "2026-09-15T22:05:21Z"
+leafwiki_updated_at: "2026-09-15T22:10:55.67884507Z"
 leafwiki_creator_id: system
-leafwiki_last_author_id: system
+leafwiki_last_author_id: zyZjvP_vg
 ---
 
 # Getting Started
@@ -19,7 +20,7 @@ This guide walks through deploying Caddy alongside `caddy-config` on Incus using
 
 ## Prerequisites
 
-1. **Incus Server**: Running Incus 6.0 LTS or 7.0+ (local Unix socket or remote HTTPS).
+1. **Incus Server**: Running Incus 7.0+
 2. **`incus-compose`**: Installed locally or in your deployment workflow.
 3. **Storage Volume for Caddy**: Caddy requires a persistent storage volume mounted to `/config` to preserve configuration across reboots and recreations.
 
