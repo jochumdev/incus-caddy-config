@@ -53,6 +53,12 @@ func TestConfigValidate(t *testing.T) {
 	require.Equal(t, "infra", args.Targets[1].Project)
 	require.Equal(t, "caddy-dev", args.Targets[1].Instance)
 	require.Len(t, args.OSTargets, 2)
+
+	// Custom global template.
+	cfg.GlobalTemplate = "{ admin localhost:2019 }"
+	args, err = cfg.validate()
+	require.NoError(t, err)
+	require.Equal(t, "{ admin localhost:2019 }", args.GlobalTemplate)
 }
 
 func TestConfigEndpoint(t *testing.T) {

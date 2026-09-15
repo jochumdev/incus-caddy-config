@@ -58,20 +58,19 @@ services:
     volumes:
       - config:/config
       - data:/data
-    command: >-
-      sh -c '
-      if [ ! -f /config/Caddyfile ]; then
-        echo "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile;
-      fi;
-      exec caddy run --config /config/Caddyfile --adapter caddyfile'
+    command: |
+      sh -c 'if [ ! -f /config/Caddyfile ]; then echo -e "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile; fi; exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
   caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
+    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.2
     restart: unless-stopped
-    ports:
-      - "9153:9153"
+    depends_on:
+      caddy:
+        condition: service_healthy
+    # ports:
+    #   - "9153:9153"
     environment:
-      INCUS_CADDY_INCUS: https://10.0.1.1:8443
+      INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
       INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
       INCUS_CADDY_INSTANCES: "edge:default:caddy"
       INCUS_CADDY_HTTP_ADDRESS: ":9153"

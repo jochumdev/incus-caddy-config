@@ -20,7 +20,7 @@ func TestRendererDefaultVhost(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, "")
+	content, err := render(vhosts, "", "")
 	require.NoError(t, err)
 
 	out := string(content)
@@ -45,7 +45,7 @@ func TestRendererCustomInlineTemplate(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, "")
+	content, err := render(vhosts, "", "")
 	require.NoError(t, err)
 
 	out := string(content)
@@ -70,7 +70,7 @@ func TestRendererCustomTemplateFile(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, tmpDir)
+	content, err := render(vhosts, tmpDir, "")
 	require.NoError(t, err)
 
 	out := string(content)
@@ -86,7 +86,7 @@ func TestRendererInvalidInlineTemplate(t *testing.T) {
 		},
 	}
 
-	_, err := render(vhosts, "")
+	_, err := render(vhosts, "", "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "bad.example.com")
 }
@@ -104,7 +104,7 @@ func TestRendererInvalidTemplateFile(t *testing.T) {
 		},
 	}
 
-	_, err = render(vhosts, tmpDir)
+	_, err = render(vhosts, tmpDir, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "resolving template for domain \"broken.example.com\"")
 }
@@ -118,7 +118,7 @@ func TestRendererTemplateExecutionFailure(t *testing.T) {
 		},
 	}
 
-	_, err := render(vhosts, "")
+	_, err := render(vhosts, "", "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "rendering template for domain \"fail.example.com\"")
 }
@@ -131,7 +131,7 @@ func TestRendererWhitespaceOnlyTemplate(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, "")
+	content, err := render(vhosts, "", "")
 	require.NoError(t, err)
 
 	// Whitespace-only block is not appended, only defaultBaseTemplate remains.
@@ -162,10 +162,154 @@ func TestRendererTemplateExtensions(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, tmpDir)
+	content, err := render(vhosts, tmpDir, "")
 	require.NoError(t, err)
 
 	out := string(content)
 	require.Contains(t, out, "ext.example.com { caddyfile_ext }")
 	require.Contains(t, out, "exact.example.com { exact_match }")
+}
+
+func TestRendererCustomGlobalInlineTemplate(t *testing.T) {
+	globalTmpl := `{
+	admin localhost:2019
+	email admin@example.com
+}`
+	vhosts := []vhost{
+		{
+			Domain:    "app.example.com",
+			Upstreams: []string{"10.0.1.5:8080"},
+		},
+	}
+
+	content, err := render(vhosts, "", globalTmpl)
+	require.NoError(t, err)
+
+	out := string(content)
+	require.Contains(t, out, "email admin@example.com")
+	require.Contains(t, out, "admin localhost:2019")
+	require.Contains(t, out, "app.example.com {")
+}
+
+func TestRendererCustomGlobalTemplateFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	globalFile := filepath.Join(tmpDir, "my_global.caddyfile")
+	err := os.WriteFile(globalFile, []byte(`{
+	admin localhost:2019
+	auto_https off
+}`), 0600)
+	require.NoError(t, err)
+
+	vhosts := []vhost{
+		{
+			Domain:    "app.example.com",
+			Upstreams: []string{"10.0.1.5:8080"},
+		},
+	}
+
+	content, err := render(vhosts, "", globalFile)
+	require.NoError(t, err)
+
+	out := string(content)
+	require.Contains(t, out, "auto_https off")
+	require.Contains(t, out, "app.example.com {")
+}
+
+func TestRendererCustomGlobalTemplateInCustomTemplatesDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	globalFile := filepath.Join(tmpDir, "global.caddyfile")
+	err := os.WriteFile(globalFile, []byte(`{
+	admin localhost:2019
+	servers {
+		trusted_proxies static 10.0.0.0/8
+	}
+}`), 0600)
+	require.NoError(t, err)
+
+	vhosts := []vhost{
+		{
+			Domain:    "app.example.com",
+			Upstreams: []string{"10.0.1.5:8080"},
+		},
+	}
+
+	// globalTemplate is empty, should auto-discover global.caddyfile in customTemplatesDir
+	content, err := render(vhosts, tmpDir, "")
+	require.NoError(t, err)
+
+	out := string(content)
+	require.Contains(t, out, "trusted_proxies static 10.0.0.0/8")
+	require.Contains(t, out, "app.example.com {")
+}
+
+func TestRendererCustomGlobalTemplateInCustomTemplatesDirTmpl(t *testing.T) {
+	tmpDir := t.TempDir()
+	globalFile := filepath.Join(tmpDir, "global.tmpl")
+	err := os.WriteFile(globalFile, []byte(`{
+	admin localhost:2019
+	log {
+		level DEBUG
+	}
+}`), 0600)
+	require.NoError(t, err)
+
+	vhosts := []vhost{
+		{
+			Domain:    "app.example.com",
+			Upstreams: []string{"10.0.1.5:8080"},
+		},
+	}
+
+	content, err := render(vhosts, tmpDir, "")
+	require.NoError(t, err)
+
+	out := string(content)
+	require.Contains(t, out, "level DEBUG")
+	require.Contains(t, out, "app.example.com {")
+}
+
+func TestRendererGlobalTemplateWithVhostsContext(t *testing.T) {
+	globalTmpl := `{
+	admin localhost:2019
+	# Total vhosts: {{ len .Vhosts }}
+}`
+	vhosts := []vhost{
+		{Domain: "a.example.com", Upstreams: []string{"10.0.1.1:80"}},
+		{Domain: "b.example.com", Upstreams: []string{"10.0.1.2:80"}},
+	}
+
+	content, err := render(vhosts, "", globalTmpl)
+	require.NoError(t, err)
+
+	out := string(content)
+	require.Contains(t, out, "# Total vhosts: 2")
+}
+
+func TestRendererInvalidGlobalTemplate(t *testing.T) {
+	vhosts := []vhost{{Domain: "app.example.com"}}
+
+	_, err := render(vhosts, "", "{{ unclosed")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "resolving global template")
+}
+
+func TestRendererMissingGlobalTemplateFile(t *testing.T) {
+	vhosts := []vhost{{Domain: "app.example.com"}}
+
+	_, err := render(vhosts, "", "/nonexistent/global.caddyfile")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reading global template file")
+}
+
+func TestRendererInvalidGlobalTemplateInCustomTemplatesDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	globalFile := filepath.Join(tmpDir, "global.tmpl")
+	err := os.WriteFile(globalFile, []byte(`{{ unclosed`), 0600)
+	require.NoError(t, err)
+
+	vhosts := []vhost{{Domain: "app.example.com"}}
+
+	_, err = render(vhosts, tmpDir, "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parsing global template file")
 }

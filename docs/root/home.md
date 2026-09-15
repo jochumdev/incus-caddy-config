@@ -49,8 +49,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - caddy-config:/config
-      - caddy-data:/data
+      - config:/config
+      - data:/data
 
   api:
     image: docker.io/library/busybox:latest
@@ -60,8 +60,8 @@ services:
       edge.upstream: "8080"
 
 volumes:
-  caddy-config:
-  caddy-data:
+  config:
+  data:
 ```
 
 When `caddy-config` runs with `--caddy-instance edge:default:caddy`, it automatically discovers `api`, resolves its Incus bridge IPv4 address, and renders the reverse proxy block into Caddy:

@@ -33,6 +33,68 @@ When an instance has no `template` label, `caddy-config` applies the default sit
 
 ---
 
+## Customizing the Global Options Block
+
+By default, `caddy-config` prepends a minimal global options block to every rendered Caddyfile:
+
+```caddyfile
+{
+	admin localhost:2019
+}
+```
+
+You can overwrite this block to configure global settings such as TLS certificates, global logging, email, acme CA endpoints, or trusted proxies.
+
+### 1. Via CLI Flag or Environment Variable (`--global-template`)
+
+You can pass a custom template directly using `--global-template` (or `INCUS_CADDY_GLOBAL_TEMPLATE`):
+
+**As a file path:**
+```bash
+caddy-config run \
+  --caddy-instance edge:default:caddy \
+  --global-template /etc/caddy/global.caddyfile
+```
+
+**As an inline template string:**
+```bash
+caddy-config run \
+  --caddy-instance edge:default:caddy \
+  --global-template '{
+	admin localhost:2019
+	email admin@example.com
+}'
+```
+
+### 2. Auto-Discovery via External Template Directory (`--custom-templates-dir`)
+
+If `--custom-templates-dir` is configured (e.g. `--custom-templates-dir /etc/caddy/templates`), `caddy-config` automatically checks for a global template file matching one of:
+1. `global.caddyfile`
+2. `global.tmpl`
+3. `global`
+
+When present, `caddy-config` uses that file without requiring an explicit `--global-template` flag.
+
+### Global Template Context Variables
+
+The global template is evaluated with Go's `text/template` engine and has access to:
+
+| Variable | Type | Description |
+|---|---|---|
+| `.Vhosts` | `[]vhost` | List of all virtual hosts configured for this deployment target. |
+
+Example:
+```caddyfile
+{
+	admin localhost:2019
+	{{- if .Vhosts }}
+	# Configured for {{ len .Vhosts }} active routes
+	{{- end }}
+}
+```
+
+---
+
 ## Template Context Variables
 
 Inside your custom template, the following fields are available:

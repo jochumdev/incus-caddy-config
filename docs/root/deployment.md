@@ -36,22 +36,21 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - caddy-config:/config
-      - caddy-data:/data
-    command: >-
-      sh -c '
-      if [ ! -f /config/Caddyfile ]; then
-        echo "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Initializing edge proxy...\" 503\n}\n" > /config/Caddyfile;
-      fi;
-      exec caddy run --config /config/Caddyfile --adapter caddyfile'
+      - config:/config
+      - data:/data
+    command: |
+      sh -c 'if [ ! -f /config/Caddyfile ]; then echo -e "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile; fi; exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
   caddy-config:
-    image: ghcr.io/lxc/incus-caddy-config:latest
+    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
     restart: unless-stopped
+    depends_on:
+      caddy:
+        condition: service_healthy
     ports:
       - "9153:9153"
     environment:
-      INCUS_CADDY_INCUS: https://10.0.1.1:8443
+      INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
       INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
       INCUS_CADDY_INSTANCES: "edge:default:caddy"
       INCUS_CADDY_HTTP_ADDRESS: ":9153"
@@ -59,28 +58,25 @@ services:
     secrets:
       - token
     volumes:
-      - config-data:/var/lib/caddy-config
-    depends_on:
-      caddy:
-        condition: service_started
+      - caddy-config:/var/lib/caddy-config
 
 secrets:
   token:
     environment: INCUS_TOKEN
 
 volumes:
+  config:
+  data:
   caddy-config:
-  caddy-data:
-  config-data:
 ```
 
 ### Purpose of Each Volume
 
-1. **`caddy-config:/config`**:
+1. **`config:/config`**:
    Persistent Incus custom storage volume holding `/config/Caddyfile`. `caddy-config` connects directly to this volume over SFTP to write and update the configuration.
-2. **`caddy-data:/data`**:
+2. **`data:/data`**:
    Persistent volume where Caddy stores automatic TLS certificates (from Let's Encrypt / ZeroSSL) and OCSP stapling cache.
-3. **`config-data:/var/lib/caddy-config`**:
+3. **`caddy-config:/var/lib/caddy-config`**:
    Stores `caddy-config`'s enrolled client TLS certificate (`client.crt`, `client.key`) so trust tokens are only needed once.
 
 ---

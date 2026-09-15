@@ -38,6 +38,7 @@ type config struct {
 
 	CaddyfilePath      string
 	CustomTemplatesDir string
+	GlobalTemplate     string
 
 	DebounceWindow time.Duration
 	HTTPAddr       string
@@ -68,6 +69,7 @@ type mainActionArgs struct {
 
 	CaddyfilePath      string
 	CustomTemplatesDir string
+	GlobalTemplate     string
 
 	DebounceWindow time.Duration
 	HTTPAddr       string
@@ -135,6 +137,7 @@ func (c *config) validate() (*mainActionArgs, error) {
 		OSTargets:          osTargets,
 		CaddyfilePath:      c.CaddyfilePath,
 		CustomTemplatesDir: c.CustomTemplatesDir,
+		GlobalTemplate:     c.GlobalTemplate,
 		DebounceWindow:     c.DebounceWindow,
 		HTTPAddr:           c.HTTPAddr,
 		Exclude:            c.Exclude,

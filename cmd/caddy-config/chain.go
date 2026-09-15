@@ -66,6 +66,7 @@ func chain(logger *slog.Logger, args *mainActionArgs) []position {
 				OSTargets:          args.OSTargets,
 				CaddyfilePath:      args.CaddyfilePath,
 				CustomTemplatesDir: args.CustomTemplatesDir,
+				GlobalTemplate:     args.GlobalTemplate,
 			},
 		)},
 		position{plugin: http.New(logger, http.Listen(args.HTTPAddr), http.Pprof(args.Pprof)), optional: true},
