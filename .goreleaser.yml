@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+
+version: 2
+
+builds:
+  - id: "caddy-config"
+    main: ./cmd/caddy-config
+    binary: caddy-config
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - ppc64le
+      - s390x
+      - riscv64
+    ignore:
+      - goos: darwin
+        goarch: ppc64le
+      - goos: darwin
+        goarch: s390x
+      - goos: darwin
+        goarch: riscv64
+      - goos: windows
+        goarch: ppc64le
+      - goos: windows
+        goarch: s390x
+      - goos: windows
+        goarch: riscv64
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - id: "caddy-config"
+    ids:
+      - "caddy-config"
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+dockers_v2:
+  - id: caddy-config
+    ids:
+      - "caddy-config"
+    dockerfile: Containerfile.goreleaser
+    build_args:
+      VERSION: "{{ .Version }}"
+    images:
+      - "ghcr.io/lxc/incus-caddy-config"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    annotations:
+      "org.opencontainers.image.description": "caddy-config - Dynamic Caddy configuration from Incus events"
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/ppc64le
+      - linux/s390x
+      - linux/riscv64
+
+release:
+  # Never publish straight from a tag push; the release is published by hand.
+  draft: true
+  # Marks the release pre-release when the tag carries a semver pre-release part.
+  prerelease: auto

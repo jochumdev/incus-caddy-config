@@ -1,0 +1,15 @@
+FROM busybox:glibc
+
+ARG TARGETPLATFORM
+ARG VERSION
+
+COPY ${TARGETPLATFORM}/caddy-config /usr/local/bin/caddy-config
+
+WORKDIR /
+
+EXPOSE 9153
+
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --spider http://127.0.0.1:9153/ready || exit 1
+
+CMD ["caddy-config", "run"]

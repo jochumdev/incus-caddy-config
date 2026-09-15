@@ -1,0 +1,38 @@
+name: e2e-caddy
+
+services:
+  caddy:
+    image: docker.io/library/caddy:2.11.4-alpine
+    container_name: caddy
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - mkdir -p /config /data && if [ ! -f /config/Caddyfile ]; then echo ':80' > /config/Caddyfile && echo 'respond bootstrap 404' >> /config/Caddyfile; fi && exec caddy run --config /config/Caddyfile --adapter caddyfile
+    volumes:
+      - caddy-config:/config
+      - caddy-data:/data
+
+  api1:
+    image: docker.io/library/busybox:glibc
+    container_name: api1
+    restart: unless-stopped
+    command: >
+      sh -c "mkdir -p /www && echo 'api1-ok' > /www/index.html && exec httpd -f -v -p 8080 -h /www"
+    labels:
+      edge.domain: "http://api.example.test"
+      edge.upstream: "8080"
+
+  api2:
+    image: docker.io/library/busybox:glibc
+    container_name: api2
+    restart: unless-stopped
+    command: >
+      sh -c "mkdir -p /www && echo 'api2-ok' > /www/index.html && exec httpd -f -v -p 8080 -h /www"
+    labels:
+      edge.domain: "http://api.example.test"
+      edge.upstream: "8080"
+
+volumes:
+  caddy-config:
+  caddy-data:

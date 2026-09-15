@@ -1,0 +1,90 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # https://stackoverflow.com/a/79780883/3368468
+  GOTOOLCHAIN: "go1.27.0+auto"
+  REPORTS_DIR: reports
+
+jobs:
+  lint:
+    name: Lint & Hygiene
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Just
+        uses: extractions/setup-just@v4
+
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+      - name: Check go mod tidy
+        run: |
+          just tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run linter
+        run: just lint
+
+  test:
+    name: Test & Build
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Just
+        uses: extractions/setup-just@v4
+
+      - name: Install gotestsum
+        run: |
+          go install gotest.tools/gotestsum@latest
+
+      - name: Run tests
+        run: |
+          just test-local
+          {
+            echo '## Test Coverage'
+            echo '```'
+            just cover
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build binary
+        run: |
+          just build
+          ./bin/caddy-config version

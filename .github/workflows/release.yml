@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to write releases
+  id-token: write # needed for keyless signing
+  packages: write # needed for ghcr access
+  attestations: write # needed for attestations
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # https://stackoverflow.com/a/79780883/3368468
+  GOTOOLCHAIN: "go1.27.0+auto"
+  REPORTS_DIR: reports
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v4.2.0
+      - uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ghcr-login
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v4.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # After GoReleaser runs, attest all the files in ./dist/checksums.txt:
+      - name: Attest Build Provenance for Archives
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: ./dist/checksums.txt
+
+      # After GoReleaser runs, attest all the images in ./dist/digests.txt:
+      - name: Attest Build Provenance for Docker Images
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: ./dist/digests.txt

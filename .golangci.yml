@@ -1,0 +1,143 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+  issues-exit-code: 1
+  tests: true
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - dogsled
+    - dupl
+    - errorlint
+    - exhaustive
+    - gocritic
+    - gosec
+    - misspell
+    - nakedret
+    - nilerr
+    - noctx
+    - predeclared
+    - revive
+    - unconvert
+    - unparam
+    - whitespace
+  settings:
+    dupl:
+      threshold: 150
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - io.Copy
+        - io.ReadAll
+        - (io.ReadCloser).Close
+        - (*encoding/json.Encoder).Encode
+        - (*io.SectionReader).Seek
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+    exhaustive:
+      default-signifies-exhaustive: true
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - ifElseChain
+        - elseif
+        - appendCombine
+        - commentedOutCode
+      enabled-tags:
+        - diagnostic
+        - performance
+    gosec:
+      excludes:
+        - G104
+        - G115
+        - G304
+    govet:
+      disable:
+        - fieldalignment
+        - shadow
+      enable-all: true
+    misspell:
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    prealloc:
+      simple: true
+      for-loops: true
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+          disabled: true
+        - name: var-declaration
+        - name: var-naming
+    unparam:
+      check-exported: false
+  exclusions:
+    warn-unused: false
+    generated: lax
+    rules:
+      - linters:
+          - dupl
+          - errcheck
+          - goconst
+          - gosec
+          - govet
+          - unparam
+        path: _test\.go
+      - linters:
+          - dupl
+          - goconst
+          - gocritic
+        path: .*\.gen\.go$
+    paths:
+      - ^work/
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+severity:
+  default: warning
+  rules:
+    - linters:
+        - errcheck
+        - gosec
+      severity: error
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jochumdev/incus-caddy-config
+  exclusions:
+    generated: lax
+    paths:
+      - ^work/

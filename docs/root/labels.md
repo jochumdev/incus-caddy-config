@@ -1,0 +1,180 @@
+---
+title: Instance Labels & Routing
+description: Reference guide for configuring dynamic Caddy reverse proxy routes using Incus instance labels.
+published: true
+editor: markdown
+---
+
+# Instance Labels & Routing
+
+`caddy-config` derives routing rules from labels assigned to Incus containers and virtual machines.
+
+---
+
+## Target Binding Syntax
+
+`caddy-config` connects a label prefix to a target Caddy container using the `--caddy-instance` flag:
+
+```text
+--caddy-instance <label>:<project>:<instance>
+```
+
+For example:
+```bash
+--caddy-instance edge:default:caddy-prod
+```
+- `<label>`: The label prefix to monitor (`edge`).
+- `<project>`: The Incus project containing the Caddy container (`default`).
+- `<instance>`: The target Caddy instance name (`caddy-prod`).
+
+You can specify `--caddy-instance` multiple times to route different subsets of services to distinct Caddy servers.
+
+---
+
+## Label Prefixing & Compose Syntax
+
+In Incus, user-defined labels carry the `user.label.` prefix.
+
+When using **`incus-compose`**, the `user.label.` prefix is automatically added to all entries under the `labels:` section.
+
+| In `compose.yaml` | In Incus (`incus config show <instance>`) |
+|---|---|
+| `labels: edge.domain: "example.com"` | `user.label.edge.domain: "example.com"` |
+| `labels: edge.upstream: "8080"` | `user.label.edge.upstream: "8080"` |
+
+---
+
+## Label Reference
+
+For a target bound to prefix `edge`:
+
+| Label | Description | Example |
+|---|---|---|
+| `user.label.edge.domain` | **(Required)** Domain name(s) to match. Multiple domains are separated by spaces. | `api.example.com` or `app.lan web.lan` |
+| `user.label.edge.upstream` | Target port or `host:port` override. If omitted, routes to container IP on default HTTP port. | `8080`, `3000`, or `10.0.1.50:9090` |
+| `user.label.edge.network` | Incus network interface name to resolve IPv4 from. Defaults to the first valid non-loopback IPv4 address. | `incusbr0`, `eth0`, or `internal` |
+| `user.label.edge.redirect` | Target URL for permanent redirects (renders `redir <url> permanent`). | `https://example.com{uri}` |
+| `user.label.edge.template` | Custom vhost template name in `--custom-templates-dir` or an inline Go template. | `php_site` or inline site block |
+| `user.label.edge.service` | Custom service name override (defaults to `user.label.incus-compose.service`). | `payments-api` |
+
+---
+
+## IPv4 Address Resolution
+
+`caddy-config` resolves upstream container IP addresses dynamically:
+
+1. **Target Network Matching**:
+   If `user.label.<prefix>.network` is set (e.g. `internal`), `caddy-config` searches the instance's interfaces for one attached to `internal` and selects its first non-loopback IPv4 address.
+2. **First Available Non-Loopback IPv4**:
+   If no network is specified (or the specified network is not attached), `caddy-config` selects the first non-loopback IPv4 address across all attached interfaces.
+3. **Loopback & Invalid Address Exclusion**:
+   Addresses matching `127.0.0.0/8` (loopback) or unparseable IP addresses are automatically skipped.
+
+---
+
+## Routing Patterns & Examples
+
+### 1. Simple Reverse Proxy
+
+Routes `http://web.example.test` to port `8080` of the `web` container:
+
+```yaml
+services:
+  web:
+    image: docker.io/library/nginx:alpine
+    labels:
+      edge.domain: "web.example.test"
+      edge.upstream: "8080"
+```
+
+Rendered Caddyfile:
+```caddyfile
+web.example.test {
+	reverse_proxy 10.0.1.15:8080
+}
+```
+
+### 2. Multi-Domain Routing
+
+To match multiple domains for the same service, separate them with spaces:
+
+```yaml
+services:
+  portal:
+    image: docker.io/library/nginx:alpine
+    labels:
+      edge.domain: "portal.example.com app.example.com"
+      edge.upstream: "80"
+```
+
+Rendered Caddyfile:
+```caddyfile
+portal.example.com app.example.com {
+	reverse_proxy 10.0.1.18:80
+}
+```
+
+### 3. Automatic Load Balancing (Multiple Replicas)
+
+When multiple instances define the same `edge.domain`, `caddy-config` merges their upstreams into a single sorted load-balanced `reverse_proxy` directive:
+
+```yaml
+services:
+  api1:
+    image: docker.io/library/busybox:latest
+    command: httpd -f -p 8080
+    labels:
+      edge.domain: "api.example.com"
+      edge.upstream: "8080"
+
+  api2:
+    image: docker.io/library/busybox:latest
+    command: httpd -f -p 8080
+    labels:
+      edge.domain: "api.example.com"
+      edge.upstream: "8080"
+```
+
+Rendered Caddyfile:
+```caddyfile
+api.example.com {
+	reverse_proxy 10.0.1.20:8080 10.0.1.21:8080
+}
+```
+
+If `api1` stops, `caddy-config` detects the stop event and updates Caddy to route solely to `api2`. When `api1` restarts, it is automatically restored to the pool.
+
+### 4. Canonical Domain Redirect
+
+To redirect one domain to another:
+
+```yaml
+services:
+  old-site:
+    image: docker.io/library/busybox:latest
+    command: sh -c "sleep infinity"
+    labels:
+      edge.domain: "old.example.com"
+      edge.redirect: "https://new.example.com{uri}"
+```
+
+Rendered Caddyfile:
+```caddyfile
+old.example.com {
+	redir https://new.example.com{uri} permanent
+}
+```
+
+### 5. Multi-Network Instance (Specific Network)
+
+If an instance is connected to both a private management network (`mgmt`) and an internal service bridge (`appbr0`), explicitly pick the interface for reverse proxying:
+
+```yaml
+services:
+  backend:
+    image: docker.io/library/nginx:alpine
+    labels:
+      edge.domain: "backend.internal"
+      edge.upstream: "8000"
+      edge.network: "appbr0"
+```

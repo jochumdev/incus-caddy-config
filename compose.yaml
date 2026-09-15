@@ -1,0 +1,68 @@
+name: caddy-stack
+
+# Single Caddy + caddy-config stack for incus-compose.
+#
+# Usage with trust token:
+#   1. Mint a trust token for caddy-config:
+#      export INCUS_TOKEN=$(incus config trust add --quiet caddy-config)
+#   2. Start the stack:
+#      incus-compose up -d
+#
+# Routing instances through this Caddy proxy:
+#   Set labels on routed instances:
+#     user.label.caddy.domain: "app.example.com"
+#     user.label.caddy.upstream: "8080"
+#     user.label.caddy.network: "eth0" # optional: interface for IPv4
+
+services:
+  caddy:
+    image: docker.io/library/caddy:2.11.4-alpine
+    container_name: caddy
+    restart: unless-stopped
+    command: >
+      sh -c "if [ ! -f /config/Caddyfile ]; then printf '{\n\tadmin localhost:2019\n}\n' > /config/Caddyfile; fi;
+      exec caddy run --config /config/Caddyfile --adapter caddyfile"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-config:/config
+      - caddy-data:/data
+    networks:
+      - default
+
+  caddy-config:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: caddy-config
+    restart: unless-stopped
+    depends_on:
+      - caddy
+    environment:
+      INCUS_CADDY_INCUS: "${INCUS_ENDPOINT:?Incus HTTPS API endpoint is required, e.g. https://10.0.0.1:8443}"
+      INCUS_CADDY_INSTANCES: "${CADDY_LABEL:-caddy}:${INCUS_PROJECT:-default}:caddy"
+      INCUS_CADDY_CADDYFILE_PATH: /config/Caddyfile
+      INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
+      INCUS_CADDY_SECRETS_DIR: /run/secrets
+      INCUS_CADDY_HTTP_ADDRESS: :9153
+      INCUS_CADDY_LOG: "${INCUS_CADDY_LOG:-INFO}"
+    secrets:
+      - source: token
+        target: /run/secrets/token
+    volumes:
+      - config-data:/var/lib/caddy-config
+    networks:
+      - default
+
+secrets:
+  token:
+    environment: INCUS_TOKEN
+
+volumes:
+  caddy-config:
+  caddy-data:
+  config-data:
+
+networks:
+  default:
