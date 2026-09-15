@@ -1,8 +1,14 @@
 ---
-title: Deployment & Operations
 description: Production deployment guide, volume setup, container reboot persistence, and troubleshooting.
-published: true
 editor: markdown
+published: true
+title: Deployment & Operations
+leafwiki_id: eXZjvElvg
+leafwiki_title: Deployment & Operations
+leafwiki_created_at: "2026-09-15T22:05:21Z"
+leafwiki_updated_at: "2026-09-15T22:05:21Z"
+leafwiki_creator_id: system
+leafwiki_last_author_id: system
 ---
 
 # Deployment & Operations

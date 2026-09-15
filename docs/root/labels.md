@@ -1,8 +1,14 @@
 ---
-title: Instance Labels & Routing
 description: Reference guide for configuring dynamic Caddy reverse proxy routes using Incus instance labels.
-published: true
 editor: markdown
+published: true
+title: Instance Labels & Routing
+leafwiki_id: erZCvElDR
+leafwiki_title: Instance Labels & Routing
+leafwiki_created_at: "2026-09-15T22:05:21Z"
+leafwiki_updated_at: "2026-09-15T22:05:21Z"
+leafwiki_creator_id: system
+leafwiki_last_author_id: system
 ---
 
 # Instance Labels & Routing

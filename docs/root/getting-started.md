@@ -1,8 +1,14 @@
 ---
-title: Getting Started
 description: Quickstart guide to running Caddy and caddy-config on Incus with automated reverse proxying.
-published: true
 editor: markdown
+published: true
+title: Getting Started
+leafwiki_id: drZjvElvg
+leafwiki_title: Getting Started
+leafwiki_created_at: "2026-09-15T22:05:21Z"
+leafwiki_updated_at: "2026-09-15T22:05:21Z"
+leafwiki_creator_id: system
+leafwiki_last_author_id: system
 ---
 
 # Getting Started

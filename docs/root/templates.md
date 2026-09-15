@@ -1,8 +1,14 @@
 ---
-title: Custom Vhost Templates
 description: Guide to customizing Caddyfile site blocks using inline Go templates and external template files.
-published: true
 editor: markdown
+published: true
+title: Custom Vhost Templates
+leafwiki_id: ICZjDP_vg
+leafwiki_title: Custom Vhost Templates
+leafwiki_created_at: "2026-09-15T22:05:21Z"
+leafwiki_updated_at: "2026-09-15T22:05:21Z"
+leafwiki_creator_id: system
+leafwiki_last_author_id: system
 ---
 
 # Custom Vhost Templates

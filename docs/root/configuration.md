@@ -1,8 +1,14 @@
 ---
-title: Configuration Reference
 description: Complete specification of CLI flags, canonical environment variables, and authentication options.
-published: true
 editor: markdown
+published: true
+title: Configuration Reference
+leafwiki_id: fXWCvE_vR
+leafwiki_title: Configuration Reference
+leafwiki_created_at: "2026-09-15T22:05:21Z"
+leafwiki_updated_at: "2026-09-15T22:05:21Z"
+leafwiki_creator_id: system
+leafwiki_last_author_id: system
 ---
 
 # Configuration Reference
