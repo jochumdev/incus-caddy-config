@@ -120,7 +120,7 @@ services:
       exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
   caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:latest
+    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:v1.0.0-beta.1
     restart: unless-stopped
     ports:
       - "9153:9153"
