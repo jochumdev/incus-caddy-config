@@ -2,16 +2,17 @@
 description: Dynamic Caddy reverse proxy configuration driven by Incus instance events via ievent.
 editor: markdown
 published: true
+tags: []
 title: Incus Caddy Config
 leafwiki_id: frWCDE_vR
 leafwiki_title: Incus Caddy Config
 leafwiki_created_at: "2026-09-15T22:05:21Z"
-leafwiki_updated_at: "2026-09-15T22:05:21Z"
+leafwiki_updated_at: "2026-09-15T22:11:28.269922752Z"
 leafwiki_creator_id: system
-leafwiki_last_author_id: system
+leafwiki_last_author_id: zyZjvP_vg
 ---
 
-# Incus Caddy Config (`caddy-config`)
+# Incus Caddy Config
 
 Dynamic, zero-touch reverse proxy configuration for [Caddy](https://caddyserver.com/) on [Incus](https://linuxcontainers.org/incus/), driven by instance lifecycle events.
 
