@@ -11,6 +11,7 @@ leafwiki_updated_at: "2026-09-15T22:23:15.032427752Z"
 leafwiki_creator_id: system
 leafwiki_last_author_id: zyZjvP_vg
 ---
+
 # Getting Started
 
 This guide walks through deploying Caddy alongside `caddy-config` on Incus using `incus-compose`.
@@ -65,7 +66,7 @@ services:
       exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
   caddy-config:
-    image: ghcr.io/lxc/incus-caddy-config:latest
+    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:latest
     restart: unless-stopped
     ports:
       - "9153:9153"
