@@ -92,6 +92,7 @@ incus config trust add caddy-config
 ```
 
 Save the token into `.env` (loaded automatically by `incus-compose` without `--os-env`):
+
 ```bash
 echo "INCUS_TOKEN=<token>" > .env
 ```
@@ -109,8 +110,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - caddy-config:/config
-      - caddy-data:/data
+      - config:/config
+      - data:/data
     command: >-
       sh -c '
       if [ ! -f /config/Caddyfile ]; then
@@ -132,16 +133,16 @@ services:
     secrets:
       - token
     volumes:
-      - config-data:/var/lib/caddy-config
+      - caddy-config-data:/var/lib/caddy-config
 
 secrets:
   token:
     environment: INCUS_TOKEN
 
 volumes:
-  caddy-config:
-  caddy-data:
-  config-data:
+  config:
+  data:
+  caddy-config-data:
 ```
 
 Start the stack:
@@ -164,11 +165,13 @@ services:
 ```
 
 Deploy the service:
+
 ```bash
 incus-compose up -d web
 ```
 
 Caddy immediately discovers the instance and routes traffic:
+
 ```bash
 curl -H "Host: web.example.test" http://127.0.0.1/
 ```
@@ -179,14 +182,14 @@ curl -H "Host: web.example.test" http://127.0.0.1/
 
 For a target bound to prefix `edge` (`--caddy-instance edge:default:caddy`):
 
-| Label in `compose.yaml` | Description |
-|---|---|
-| `edge.domain` | **(Required)** Domain name(s) to match. Space-separated for multiple domains. |
-| `edge.upstream` | Upstream port (e.g. `8080`) or `host:port` override (e.g. `10.0.1.5:8080`). |
-| `edge.network` | Network interface to resolve IPv4 from (e.g. `incusbr0`). Defaults to first non-loopback IPv4. |
-| `edge.redirect` | Target URL for permanent redirects (e.g. `https://example.com{uri}`). |
-| `edge.template` | Custom vhost template name or inline template string for full site blocks. |
-| `edge.service` | Custom service name override (defaults to `user.label.incus-compose.service`). |
+| Label in `compose.yaml` | Description                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `edge.domain`           | **(Required)** Domain name(s) to match. Space-separated for multiple domains.                  |
+| `edge.upstream`         | Upstream port (e.g. `8080`) or `host:port` override (e.g. `10.0.1.5:8080`).                    |
+| `edge.network`          | Network interface to resolve IPv4 from (e.g. `incusbr0`). Defaults to first non-loopback IPv4. |
+| `edge.redirect`         | Target URL for permanent redirects (e.g. `https://example.com{uri}`).                          |
+| `edge.template`         | Custom vhost template name or inline template string for full site blocks.                     |
+| `edge.service`          | Custom service name override (defaults to `user.label.incus-compose.service`).                 |
 
 ---
 
