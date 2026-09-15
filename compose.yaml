@@ -4,7 +4,7 @@ name: caddy-stack
 #
 # Usage with trust token:
 #   1. Mint a trust token for caddy-config:
-#      export INCUS_TOKEN=$(incus config trust add --quiet caddy-config)
+#      echo "INCUS_TOKEN=$(incus config trust add --quiet caddy-config)" > .env
 #   2. Start the stack:
 #      incus-compose up -d
 #

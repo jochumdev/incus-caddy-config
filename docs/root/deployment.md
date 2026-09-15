@@ -19,6 +19,12 @@ This guide covers operational practices for running `caddy-config` in production
 
 ## Production `compose.yaml` Stack
 
+Create a `.env` file alongside `compose.yaml` to provide the trust token (no `--os-env` needed):
+
+```bash
+echo "INCUS_TOKEN=$(incus config trust add --quiet caddy-config)" > .env
+```
+
 Here is the recommended production stack deploying Caddy alongside `caddy-config`:
 
 ```yaml

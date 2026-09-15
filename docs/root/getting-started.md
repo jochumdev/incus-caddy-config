@@ -33,11 +33,13 @@ This guide walks through deploying Caddy alongside `caddy-config` on Incus using
 incus config trust add caddy-config
 ```
 
-Incus outputs a trust token (e.g. `eyJzZXJ2ZXJfbmFtZSI6...`). Export this token into your environment:
+Incus outputs a trust token (e.g. `eyJzZXJ2ZXJfbmFtZSI6...`). Save this token into a `.env` file in the same directory as your `compose.yaml`:
 
 ```bash
-export INCUS_TOKEN="eyJzZXJ2ZXJfbmFtZSI6..."
+echo "INCUS_TOKEN=eyJzZXJ2ZXJfbmFtZSI6..." > .env
 ```
+
+`incus-compose` automatically loads `.env` files and injects secrets into the stack without requiring `--os-env`.
 
 ---
 

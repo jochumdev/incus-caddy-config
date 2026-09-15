@@ -59,12 +59,13 @@ Generate a token on the Incus host:
 incus config trust add caddy-config
 ```
 
-Provide the token via environment variable or tmpfs secret:
-```yaml
-# Via environment variable
-INCUS_CADDY_TOKEN: "eyJzZXJ2ZXJfbmFtZSI6..."
+Provide the token via a `.env` file (loaded automatically by `incus-compose` without `--os-env`):
+```bash
+echo "INCUS_TOKEN=eyJzZXJ2ZXJfbmFtZSI6..." > .env
+```
 
-# Or via Compose secret mounted to /run/secrets/token
+And reference it via a Compose secret mounted to `/run/secrets/token`:
+```yaml
 secrets:
   token:
     environment: INCUS_TOKEN

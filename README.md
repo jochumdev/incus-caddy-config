@@ -91,9 +91,9 @@ flowchart TD
 incus config trust add caddy-config
 ```
 
-Export the token:
+Save the token into `.env` (loaded automatically by `incus-compose` without `--os-env`):
 ```bash
-export INCUS_TOKEN="<token>"
+echo "INCUS_TOKEN=<token>" > .env
 ```
 
 ### 2. Run with `incus-compose`
