@@ -7,11 +7,10 @@ title: Getting Started
 leafwiki_id: drZjvElvg
 leafwiki_title: Getting Started
 leafwiki_created_at: "2026-09-15T22:05:21Z"
-leafwiki_updated_at: "2026-09-15T22:10:55.67884507Z"
+leafwiki_updated_at: "2026-09-15T22:23:15.032427752Z"
 leafwiki_creator_id: system
 leafwiki_last_author_id: zyZjvP_vg
 ---
-
 # Getting Started
 
 This guide walks through deploying Caddy alongside `caddy-config` on Incus using `incus-compose`.
@@ -20,9 +19,8 @@ This guide walks through deploying Caddy alongside `caddy-config` on Incus using
 
 ## Prerequisites
 
-1. **Incus Server**: Running Incus 7.0+
-2. **`incus-compose`**: Installed locally or in your deployment workflow.
-3. **Storage Volume for Caddy**: Caddy requires a persistent storage volume mounted to `/config` to preserve configuration across reboots and recreations.
+1. **Incus Server**: Running Incus 7.0+.
+2. **Storage Volume for Caddy**: Caddy requires a persistent storage volume mounted to `/config` to preserve configuration across reboots and recreations.
 
 ---
 
@@ -57,8 +55,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - caddy-config:/config
-      - caddy-data:/data
+      - config:/config
+      - data:/data
     command: >-
       sh -c '
       if [ ! -f /config/Caddyfile ]; then
@@ -80,16 +78,16 @@ services:
     secrets:
       - token
     volumes:
-      - config-data:/var/lib/caddy-config
+      - caddy-config:/var/lib/caddy-config
 
 secrets:
   token:
     environment: INCUS_TOKEN
 
 volumes:
+  config:
+  data:
   caddy-config:
-  caddy-data:
-  config-data:
 ```
 
 Launch the stack:
@@ -99,6 +97,7 @@ incus-compose up -d
 ```
 
 On first start:
+
 1. `caddy-config` reads the secret token from `/run/secrets/token`.
 2. It generates a client TLS certificate and enrolls it with the Incus API.
 3. The enrolled certificate is persisted in the `config-data` volume at `/var/lib/caddy-config/client.crt` and `client.key`. Future restarts reuse the certificate without requiring a token.
