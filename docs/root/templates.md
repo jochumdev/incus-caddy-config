@@ -17,9 +17,9 @@ leafwiki_last_author_id: system
 
 ---
 
-## The Default Site Block
+## Default Vhost Template
 
-When an instance has no `template` label, `caddy-config` applies the default site template:
+When an instance has no custom `template` label, `caddy-config` applies the default vhost template (`defaultVhostTemplate`):
 
 ```caddyfile
 {{ .Domain }} {
@@ -33,9 +33,9 @@ When an instance has no `template` label, `caddy-config` applies the default sit
 
 ---
 
-## Customizing the Global Options Block
+## Default Global Template & Customization
 
-By default, `caddy-config` prepends a minimal global options block to every rendered Caddyfile:
+By default, `caddy-config` prepends a minimal global options block (`defaultBaseTemplate`) to every rendered Caddyfile:
 
 ```caddyfile
 {
