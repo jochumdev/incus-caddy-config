@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/avast/retry-go/v5"
 	incusapi "github.com/lxc/incus/v7/shared/api"
 	"github.com/pkg/sftp"
 
@@ -61,161 +63,167 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 	project, _ := target.Flag("project")
 	instance, _ := target.Flag("instance")
 
-	inst, _, err := conn.GetInstance(ctx, project, instance, nil)
-	if err != nil {
-		return fmt.Errorf("getting instance %s:%s: %w", project, instance, err)
-	}
-
-	devices := inst.ExpandedDevices
-	if len(devices) == 0 {
-		devices = inst.Devices
-	}
-
-	vol := resolveVolume(devices, caddyfilePath)
-
-	var sftpClient *sftp.Client
-	var sftpStagingPath, sftpTargetPath string
-
-	containerStagingPath := filepath.Join(
-		filepath.Dir(caddyfilePath),
-		"."+filepath.Base(caddyfilePath)+".tmp",
-	)
-
-	if vol != nil {
-		relPath, err := filepath.Rel(vol.mountPath, caddyfilePath)
+	return retry.New(
+		retry.Context(ctx),
+		retry.Attempts(10),
+		retry.Delay(250*time.Millisecond),
+		retry.MaxDelay(3*time.Second),
+		retry.DelayType(retry.BackOffDelay),
+		retry.LastErrorOnly(true),
+		retry.OnRetry(func(n uint, err error) {
+			logger.Warn("retrying Caddyfile deployment",
+				"attempt", n+1,
+				"label", target.Label,
+				"project", project,
+				"instance", instance,
+				"err", err,
+			)
+		}),
+	).Do(func() error {
+		inst, _, err := conn.GetInstance(ctx, project, instance, nil)
 		if err != nil {
-			relPath = filepath.Base(caddyfilePath)
+			return fmt.Errorf("getting instance %s:%s: %w", project, instance, err)
 		}
 
-		sftpTargetPath = "/" + strings.TrimPrefix(relPath, "/")
-		sftpStagingPath = "/" + strings.TrimPrefix(filepath.Join(filepath.Dir(relPath), "."+filepath.Base(relPath)+".tmp"), "/")
+		devices := inst.ExpandedDevices
+		if len(devices) == 0 {
+			devices = inst.Devices
+		}
 
-		logger.Debug("resolved storage volume for caddy",
-			"pool", vol.pool,
-			"volume", vol.name,
-			"mount", vol.mountPath,
-			"target", sftpTargetPath,
+		vol := resolveVolume(devices, caddyfilePath)
+
+		var sftpClient *sftp.Client
+		var sftpStagingPath, sftpTargetPath string
+
+		containerStagingPath := filepath.Join(
+			filepath.Dir(caddyfilePath),
+			"."+filepath.Base(caddyfilePath)+".tmp",
 		)
 
-		sftpClient, err = conn.GetStoragePoolVolumeFileSFTP(ctx, project, vol.pool, "custom", vol.name)
+		if vol != nil {
+			relPath, err := filepath.Rel(vol.mountPath, caddyfilePath)
+			if err != nil {
+				relPath = filepath.Base(caddyfilePath)
+			}
+
+			sftpTargetPath = "/" + strings.TrimPrefix(relPath, "/")
+			sftpStagingPath = "/" + strings.TrimPrefix(filepath.Join(filepath.Dir(relPath), "."+filepath.Base(relPath)+".tmp"), "/")
+
+			logger.Debug("resolved storage volume for caddy",
+				"pool", vol.pool,
+				"volume", vol.name,
+				"mount", vol.mountPath,
+				"target", sftpTargetPath,
+			)
+
+			sftpClient, err = conn.GetStoragePoolVolumeFileSFTP(ctx, project, vol.pool, "custom", vol.name)
+			if err != nil {
+				return fmt.Errorf("opening SFTP session for volume %s/%s: %w", vol.pool, vol.name, err)
+			}
+		} else {
+			sftpTargetPath = caddyfilePath
+			sftpStagingPath = containerStagingPath
+
+			sftpClient, err = conn.GetInstanceFileSFTP(ctx, project, instance)
+			if err != nil {
+				return fmt.Errorf("opening SFTP session for %s:%s: %w", project, instance, err)
+			}
+		}
+
+		defer func() {
+			_ = sftpClient.Close()
+		}()
+
+		f, err := sftpClient.Create(sftpStagingPath)
 		if err != nil {
-			return fmt.Errorf("opening SFTP session for volume %s/%s: %w", vol.pool, vol.name, err)
+			return fmt.Errorf("creating staging file %s: %w", sftpStagingPath, err)
 		}
-	} else {
-		sftpTargetPath = caddyfilePath
-		sftpStagingPath = containerStagingPath
 
-		sftpClient, err = conn.GetInstanceFileSFTP(ctx, project, instance)
+		_, err = f.Write(content)
+		closeErr := f.Close()
 		if err != nil {
-			return fmt.Errorf("opening SFTP session for %s:%s: %w", project, instance, err)
-		}
-	}
-
-	defer func() {
-		_ = sftpClient.Close()
-	}()
-
-	f, err := sftpClient.Create(sftpStagingPath)
-	if err != nil {
-		return fmt.Errorf("creating staging file %s: %w", sftpStagingPath, err)
-	}
-
-	_, err = f.Write(content)
-	closeErr := f.Close()
-	if err != nil {
-		_ = sftpClient.Remove(sftpStagingPath)
-
-		return fmt.Errorf("writing staging content: %w", err)
-	}
-
-	if closeErr != nil {
-		_ = sftpClient.Remove(sftpStagingPath)
-
-		return fmt.Errorf("closing staging file: %w", closeErr)
-	}
-
-	running := inst.StatusCode == incusapi.Running || inst.Status == "Running"
-	if running {
-		// Validate in-container using the real Caddy binary.
-		var validateStdout, validateStderr bytes.Buffer
-		validatePost := incusapi.InstanceExecPost{
-			Command: []string{"caddy", "validate", "--config", containerStagingPath, "--adapter", "caddyfile"},
+			return fmt.Errorf("writing staging content: %w", err)
 		}
 
-		updates, err := conn.ExecInstance(ctx, project, instance, validatePost, &iclient.InstanceExecArgs{
-			Stdout: &validateStdout,
-			Stderr: &validateStderr,
+		if closeErr != nil {
+			return fmt.Errorf("closing staging file: %w", closeErr)
+		}
+
+		running := inst.StatusCode == incusapi.Running || inst.Status == "Running"
+		if running {
+			// Format and validate in-container using the real Caddy binary.
+			var fmtStdout, fmtStderr bytes.Buffer
+			fmtPost := incusapi.InstanceExecPost{
+				Command: []string{"caddy", "fmt", "--overwrite", containerStagingPath},
+			}
+
+			updates, err := conn.ExecInstance(ctx, project, instance, fmtPost, &iclient.InstanceExecArgs{
+				Stdout: &fmtStdout,
+				Stderr: &fmtStderr,
+			})
+			if err != nil {
+				return fmt.Errorf("executing caddy fmt in %s:%s: %w", project, instance, err)
+			}
+
+			op, err := iclient.WaitOperation(ctx, updates)
+			if err != nil {
+				return fmt.Errorf("waiting for caddy fmt: %w", err)
+			}
+
+			exitCode, ok := op.Metadata["return"].(float64)
+			if !ok || int(exitCode) != 0 {
+				return fmt.Errorf("caddy fmt failed (exit %d): stdout: %q, stderr: %q",
+					int(exitCode), fmtStdout.String(), fmtStderr.String())
+			}
+		}
+
+		// Atomic rename over target path on the volume or instance.
+		err = sftpClient.PosixRename(sftpStagingPath, sftpTargetPath)
+		if err != nil {
+			return fmt.Errorf("atomic rename %s -> %s: %w", sftpStagingPath, sftpTargetPath, err)
+		}
+
+		if !running {
+			logger.Info("Caddyfile deployed to volume for next boot (instance not running)",
+				"label", target.Label,
+				"project", project,
+				"instance", instance,
+			)
+
+			return nil
+		}
+
+		// Reload Caddy directly inside container.
+		var reloadStdout, reloadStderr bytes.Buffer
+		reloadPost := incusapi.InstanceExecPost{
+			Command: []string{"caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile"},
+		}
+
+		reloadUpdates, err := conn.ExecInstance(ctx, project, instance, reloadPost, &iclient.InstanceExecArgs{
+			Stdout: &reloadStdout,
+			Stderr: &reloadStderr,
 		})
 		if err != nil {
-			_ = sftpClient.Remove(sftpStagingPath)
-
-			return fmt.Errorf("executing caddy validate in %s:%s: %w", project, instance, err)
+			return fmt.Errorf("executing caddy reload in %s:%s: %w", project, instance, err)
 		}
 
-		op, err := iclient.WaitOperation(ctx, updates)
+		reloadOp, err := iclient.WaitOperation(ctx, reloadUpdates)
 		if err != nil {
-			_ = sftpClient.Remove(sftpStagingPath)
-
-			return fmt.Errorf("waiting for caddy validate: %w", err)
+			return fmt.Errorf("waiting for caddy reload: %w", err)
 		}
 
-		exitCode, ok := op.Metadata["return"].(float64)
-		if !ok || int(exitCode) != 0 {
-			_ = sftpClient.Remove(sftpStagingPath)
-
-			return fmt.Errorf("caddy validate failed (exit %d): stdout: %q, stderr: %q",
-				int(exitCode), validateStdout.String(), validateStderr.String())
+		reloadExitCode, ok := reloadOp.Metadata["return"].(float64)
+		if !ok || int(reloadExitCode) != 0 {
+			return fmt.Errorf("caddy reload failed (exit %d): stdout: %q, stderr: %q",
+				int(reloadExitCode), reloadStdout.String(), reloadStderr.String())
 		}
-	}
 
-	// Atomic rename over target path on the volume or instance.
-	err = sftpClient.PosixRename(sftpStagingPath, sftpTargetPath)
-	if err != nil {
-		_ = sftpClient.Remove(sftpStagingPath)
-
-		return fmt.Errorf("atomic rename %s -> %s: %w", sftpStagingPath, sftpTargetPath, err)
-	}
-
-	if !running {
-		logger.Info("Caddyfile deployed to volume for next boot (instance not running)",
+		logger.Info("Caddyfile deployed and reloaded successfully",
 			"label", target.Label,
 			"project", project,
 			"instance", instance,
 		)
 
 		return nil
-	}
-
-	// Reload Caddy directly inside container.
-	var reloadStdout, reloadStderr bytes.Buffer
-	reloadPost := incusapi.InstanceExecPost{
-		Command: []string{"caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile"},
-	}
-
-	reloadUpdates, err := conn.ExecInstance(ctx, project, instance, reloadPost, &iclient.InstanceExecArgs{
-		Stdout: &reloadStdout,
-		Stderr: &reloadStderr,
 	})
-	if err != nil {
-		return fmt.Errorf("executing caddy reload in %s:%s: %w", project, instance, err)
-	}
-
-	reloadOp, err := iclient.WaitOperation(ctx, reloadUpdates)
-	if err != nil {
-		return fmt.Errorf("waiting for caddy reload: %w", err)
-	}
-
-	reloadExitCode, ok := reloadOp.Metadata["return"].(float64)
-	if !ok || int(reloadExitCode) != 0 {
-		return fmt.Errorf("caddy reload failed (exit %d): stdout: %q, stderr: %q",
-			int(reloadExitCode), reloadStdout.String(), reloadStderr.String())
-	}
-
-	logger.Info("Caddyfile deployed and reloaded successfully",
-		"label", target.Label,
-		"project", project,
-		"instance", instance,
-	)
-
-	return nil
 }

@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/KimMachineGun/automemlimit v1.0.0
+	github.com/avast/retry-go/v5 v5.0.0
 	github.com/lxc/incus-compose v1.3.4-0.20260915093427-1d0c0115f56b
 	github.com/lxc/incus/v7 v7.4.0
 	github.com/pkg/sftp v1.13.11
@@ -13,7 +14,6 @@ require (
 )
 
 require (
-	github.com/avast/retry-go/v5 v5.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coredns/coredns v1.14.7 // indirect

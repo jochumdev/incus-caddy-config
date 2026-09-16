@@ -39,7 +39,7 @@ flowchart TD
 
     CC -->|"1. Subscribes to events<br/>2. Discovers instances"| IncusDaemon
     CC -->|"3. SFTP directly to storage volume"| StorageVolume[("Incus Storage Volume<br/>(caddy-config)")]
-    CC -->|"4. Exec 'caddy validate' & 'caddy reload'"| Caddy
+    CC -->|"4. Exec 'caddy fmt' & 'caddy reload'"| Caddy
 
     StorageVolume -.->|mounted at /config| Caddy
 ```
@@ -86,10 +86,10 @@ sequenceDiagram
     P->>Vol: Create & write /.Caddyfile.tmp
     
     alt Container is Running
-        P->>API: ExecInstance("caddy validate --config /.Caddyfile.tmp")
-        API->>C: caddy validate
+        P->>API: ExecInstance("caddy fmt --overwrite /.Caddyfile.tmp")
+        API->>C: caddy fmt --overwrite
         C-->>API: exit code 0
-        API-->>P: Validation succeeded
+        API-->>P: Formatting and validation succeeded
         P->>Vol: sftp.PosixRename("/.Caddyfile.tmp", "/Caddyfile")
         P->>API: ExecInstance("caddy reload --config /config/Caddyfile")
         API->>C: caddy reload
@@ -106,15 +106,15 @@ sequenceDiagram
 2. **Cold Staging (Reboot & Crash Survival)**:
    If Caddy is stopped, `caddy-config` still updates the Caddyfile on the storage volume. When Caddy starts up or reboots, it reads the updated configuration immediately.
 3. **Atomic Swapping**:
-   `caddy-config` never writes directly over the active `Caddyfile`. It writes to `/.Caddyfile.tmp` and only renames via `sftp.PosixRename` after in-container validation succeeds.
+   `caddy-config` never writes directly over the active `Caddyfile`. It writes to `/.Caddyfile.tmp` and only renames via `sftp.PosixRename` after in-container formatting and syntax validation succeeds.
 4. **Validation Isolation**:
-   If an invalid route or template syntax error occurs, validation fails in-container. The temporary file is removed, and the active `Caddyfile` remains completely untouched.
+   If an invalid route or template syntax error occurs, `caddy fmt` fails in-container. The temporary file is removed, and the active `Caddyfile` remains completely untouched.
 
 ### Co-located OS Deployment (`--os-path`)
 
 When `caddy-config` runs alongside Caddy on the same host, container, or VM:
 - **Filesystem Staging**: Writes directly to `.<base>.tmp` in the target directory and atomically swaps via `os.Rename`.
-- **Local Validation**: Executes `caddy validate --config <staging> --adapter caddyfile` on the local machine.
+- **Local Validation**: Executes `caddy fmt --overwrite <staging>` on the local machine.
 - **Local Reload**: Executes `caddy reload --config <path> --adapter caddyfile`. If the Caddy daemon is offline during boot, the file remains deployed on disk for Caddy's startup.
 - **Unified Event Pipeline**: Reconciles alongside remote `--caddy-instance` targets within the exact same single-goroutine loop.
 

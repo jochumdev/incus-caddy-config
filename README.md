@@ -56,7 +56,7 @@ flowchart TD
     end
 
     Plugin -->|"1. Write staged config via SFTP"| Vol
-    Plugin -->|"2. Exec 'caddy validate'"| CaddyProc
+    Plugin -->|"2. Exec 'caddy fmt'"| CaddyProc
     Plugin -->|"3. Atomic rename (.Caddyfile.tmp &rarr; Caddyfile)"| Vol
     Plugin -->|"4. Exec 'caddy reload'"| CaddyProc
 
@@ -65,7 +65,7 @@ flowchart TD
 
 1. **Monitors Fleet**: Subscribes to the Incus event stream and tracks instances carrying target labels.
 2. **Direct Storage Volume SFTP**: Connects directly to the underlying Incus storage volume mounted at `/config` over SFTP (`conn.GetStoragePoolVolumeFileSFTP`).
-3. **Safe Validation**: Renders Caddyfiles in-memory, stages to `/.Caddyfile.tmp`, and verifies configuration syntax inside the container with `caddy validate`.
+3. **Safe Validation & Formatting**: Renders Caddyfiles in-memory, stages to `/.Caddyfile.tmp`, and verifies/formats configuration syntax with `caddy fmt --overwrite`.
 4. **Atomic Swapping & Reload**: Atomically replaces `/config/Caddyfile` using `sftp.PosixRename` and reloads Caddy via container exec.
 5. **Reboot & Crash Survival**: If Caddy restarts or the host reboots, Caddy immediately starts up using the persisted configuration on the storage volume. If Caddy is stopped during reconcile, `caddy-config` stages directly onto the volume so it boots with the updated config on next start.
 

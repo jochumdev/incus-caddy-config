@@ -2,9 +2,7 @@
 package caddy
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"log/slog"
 	"strings"
 
@@ -36,9 +34,10 @@ type Plugin struct {
 	commandOut chan<- iutil.Command
 	inbox      chan *iutil.Event
 
-	instances    map[string]*iutil.Event
-	lastDeployed map[string][]byte
-	chain        iutil.ChainState
+	instances map[string]*iutil.Event
+	chain     iutil.ChainState
+
+	deploy *deployState
 }
 
 var _ iutil.Plugin = (*Plugin)(nil)
@@ -51,11 +50,11 @@ func New(logger *slog.Logger, cfg Config) *Plugin {
 	}
 
 	return &Plugin{
-		logger:       logger,
-		cfg:          cfg,
-		inbox:        make(chan *iutil.Event, inboxSize),
-		instances:    make(map[string]*iutil.Event),
-		lastDeployed: make(map[string][]byte),
+		logger:    logger,
+		cfg:       cfg,
+		inbox:     make(chan *iutil.Event, inboxSize),
+		instances: make(map[string]*iutil.Event),
+		deploy:    newDeployState(),
 	}
 }
 
@@ -121,8 +120,15 @@ func (p *Plugin) Handle(ev *iutil.Event) {
 	p.next(ev)
 }
 
+// Wait blocks until all in-flight deployments have completed.
+func (p *Plugin) Wait() {
+	p.deploy.wg.Wait()
+}
+
 // Run processes queued events and reconciles Caddyfiles until the context is canceled.
 func (p *Plugin) Run(ctx context.Context) error {
+	defer cancelAll(p.deploy.cancels)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -146,6 +152,10 @@ func (p *Plugin) Run(ctx context.Context) error {
 			}
 
 			p.processEvent(ctx, ev)
+
+		case res := <-p.deploy.done:
+			p.deploy.lastDeployed[res.targetKey] = res.hash
+			delete(p.deploy.cancels, res.targetKey)
 		}
 	}
 }
@@ -234,76 +244,5 @@ func (p *Plugin) reconcile(ctx context.Context) {
 		instances = append(instances, ev)
 	}
 
-	for _, target := range p.cfg.Targets {
-		vhosts := extractVhosts(target.Label, instances)
-
-		globalTmpl, _ := target.Flag("global_template")
-		if globalTmpl == "" {
-			globalTmpl, _ = target.Flag("global-template")
-		}
-
-		content, err := render(vhosts, p.cfg.TemplatesDir, globalTmpl)
-		if err != nil {
-			p.logger.Error("rendering Caddyfile", "label", target.Label, "err", err)
-
-			continue
-		}
-
-		sum := sha256.Sum256(content)
-		project, _ := target.Flag("project")
-		instance, _ := target.Flag("instance")
-		targetKey := project + "/" + instance
-
-		last := p.lastDeployed[targetKey]
-		if bytes.Equal(last, sum[:]) {
-			continue
-		}
-
-		if p.conn == nil {
-			continue
-		}
-
-		err = deploy(ctx, p.logger, p.conn, target, p.cfg.CaddyfilePath, content)
-		if err != nil {
-			p.logger.Error("deploying Caddyfile", "target", targetKey, "label", target.Label, "err", err)
-
-			continue
-		}
-
-		p.lastDeployed[targetKey] = sum[:]
-	}
-
-	for _, target := range p.cfg.OSTargets {
-		vhosts := extractVhosts(target.Label, instances)
-
-		globalTmpl, _ := target.Flag("global_template")
-		if globalTmpl == "" {
-			globalTmpl, _ = target.Flag("global-template")
-		}
-
-		content, err := render(vhosts, p.cfg.TemplatesDir, globalTmpl)
-		if err != nil {
-			p.logger.Error("rendering Caddyfile for OS target", "label", target.Label, "target", target.String(), "err", err)
-
-			continue
-		}
-
-		sum := sha256.Sum256(content)
-		path, _ := target.Flag("path")
-		targetKey := "os:" + target.Label + ":" + path
-
-		last := p.lastDeployed[targetKey]
-		if bytes.Equal(last, sum[:]) {
-			continue
-		}
-
-		err = deployOS(ctx, p.logger, target, content)
-		if err != nil {
-			p.logger.Error("deploying Caddyfile to OS path", "label", target.Label, "path", path, "err", err)
-
-			continue
-		}
-
-		p.lastDeployed[targetKey] = sum[:]
-	}
+	reconcileDeployments(ctx, p.deploy, p.logger, p.conn, p.cfg, instances)
 }

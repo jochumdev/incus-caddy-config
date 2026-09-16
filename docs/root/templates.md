@@ -234,12 +234,12 @@ Optimized for real-time applications requiring continuous flushes and keep-alive
 
 ---
 
-## Template Validation Safety
+## Template Validation & Formatting Safety
 
-Every custom template is rendered in-memory and validated using the Caddy binary inside the container (`caddy validate`) before deployment.
+Every custom template is rendered in-memory and formatted/validated using the Caddy binary inside the container (`caddy fmt --overwrite`) before deployment.
 
-If a custom template contains an invalid directive, bad syntax, or broken references:
-1. `caddy validate` fails inside the container.
+If a custom template contains an invalid directive, bad syntax, or broken structure:
+1. `caddy fmt` fails inside the container.
 2. `caddy-config` logs the exact error returned by Caddy.
 3. The invalid temporary file is discarded.
 4. **Caddy continues serving the existing, working configuration without interruption.**

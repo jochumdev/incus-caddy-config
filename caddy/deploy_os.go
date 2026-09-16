@@ -9,6 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/avast/retry-go/v5"
 )
 
 var execCommand = exec.CommandContext
@@ -16,60 +19,78 @@ var execCommand = exec.CommandContext
 // deployOS stages, validates, atomically renames, and reloads the Caddyfile on the local filesystem.
 func deployOS(ctx context.Context, logger *slog.Logger, target Target, content []byte) error {
 	caddyfilePath, _ := target.Flag("path")
-	dir := filepath.Dir(caddyfilePath)
 
-	err := os.MkdirAll(dir, 0o750)
-	if err != nil {
-		return fmt.Errorf("creating directory %s: %w", dir, err)
-	}
+	return retry.New(
+		retry.Context(ctx),
+		retry.Attempts(10),
+		retry.Delay(250*time.Millisecond),
+		retry.MaxDelay(3*time.Second),
+		retry.DelayType(retry.BackOffDelay),
+		retry.LastErrorOnly(true),
+		retry.OnRetry(func(n uint, err error) {
+			logger.Warn("retrying OS Caddyfile deployment",
+				"attempt", n+1,
+				"label", target.Label,
+				"path", caddyfilePath,
+				"err", err,
+			)
+		}),
+	).Do(func() error {
+		dir := filepath.Dir(caddyfilePath)
 
-	stagingPath := filepath.Join(dir, "."+filepath.Base(caddyfilePath)+".tmp")
+		err := os.MkdirAll(dir, 0o750)
+		if err != nil {
+			return fmt.Errorf("creating directory %s: %w", dir, err)
+		}
 
-	err = os.WriteFile(stagingPath, content, 0o600)
-	if err != nil {
-		return fmt.Errorf("writing staging file %s: %w", stagingPath, err)
-	}
+		stagingPath := filepath.Join(dir, "."+filepath.Base(caddyfilePath)+".tmp")
 
-	validateCmd := execCommand(ctx, "caddy", "validate", "--config", stagingPath, "--adapter", "caddyfile")
-	var validateOut bytes.Buffer
-	validateCmd.Stdout = &validateOut
-	validateCmd.Stderr = &validateOut
+		err = os.WriteFile(stagingPath, content, 0o600)
+		if err != nil {
+			return fmt.Errorf("writing staging file %s: %w", stagingPath, err)
+		}
 
-	err = validateCmd.Run()
-	if err != nil {
-		_ = os.Remove(stagingPath)
+		fmtCmd := execCommand(ctx, "caddy", "fmt", "--overwrite", stagingPath)
+		var fmtOut bytes.Buffer
+		fmtCmd.Stdout = &fmtOut
+		fmtCmd.Stderr = &fmtOut
 
-		return fmt.Errorf("caddy validate failed: %w (output: %q)", err, validateOut.String())
-	}
+		err = fmtCmd.Run()
+		if err != nil {
+			return fmt.Errorf("caddy fmt failed: %w (output: %q)", err, fmtOut.String())
+		}
 
-	err = os.Rename(stagingPath, caddyfilePath)
-	if err != nil {
-		_ = os.Remove(stagingPath)
+		err = os.Rename(stagingPath, caddyfilePath)
+		if err != nil {
+			return fmt.Errorf("atomic rename %s -> %s: %w", stagingPath, caddyfilePath, err)
+		}
 
-		return fmt.Errorf("atomic rename %s -> %s: %w", stagingPath, caddyfilePath, err)
-	}
+		reloadCmd := execCommand(ctx, "caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile")
+		var reloadOut bytes.Buffer
+		reloadCmd.Stdout = &reloadOut
+		reloadCmd.Stderr = &reloadOut
 
-	reloadCmd := execCommand(ctx, "caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile")
-	var reloadOut bytes.Buffer
-	reloadCmd.Stdout = &reloadOut
-	reloadCmd.Stderr = &reloadOut
+		reloadErr := reloadCmd.Run()
+		if reloadErr != nil {
+			outStr := reloadOut.String()
+			if strings.Contains(outStr, "connection refused") || strings.Contains(outStr, "no such file or directory") {
+				logger.Info("Caddyfile written to disk; caddy reload not completed (daemon may not be running)",
+					"label", target.Label,
+					"path", caddyfilePath,
+					"detail", strings.TrimSpace(outStr),
+				)
 
-	reloadErr := reloadCmd.Run()
-	if reloadErr != nil {
-		logger.Info("Caddyfile written to disk; caddy reload not completed (daemon may not be running)",
+				return nil
+			}
+
+			return fmt.Errorf("caddy reload failed: %w (output: %q)", reloadErr, outStr)
+		}
+
+		logger.Info("Caddyfile deployed and reloaded successfully on host",
 			"label", target.Label,
 			"path", caddyfilePath,
-			"detail", strings.TrimSpace(reloadOut.String()),
 		)
 
-		//nolint:nilerr // Intentional: Caddy daemon may not be running yet; file is staged for boot.
 		return nil
-	}
-
-	logger.Info("Caddyfile deployed and reloaded successfully on host",
-		"label", target.Label,
-		"path", caddyfilePath,
-	)
-
-	return nil
+	})
 }

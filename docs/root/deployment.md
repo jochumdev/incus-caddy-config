@@ -154,15 +154,15 @@ incus-compose logs -f caddy-config
 
 - Incoming Incus events and actions (`instance-started`, `instance-stopped`, `instance-renamed`).
 - Discovered network interfaces and resolved IPv4 addresses.
-- In-container `caddy validate` exit codes and output.
+- In-container `caddy fmt` exit codes and output.
 - Direct storage volume SFTP staging paths.
 
-### 3. Test In-Container Validation Manually
+### 3. Test In-Container Formatting & Validation Manually
 
 If you suspect a configuration syntax issue:
 
 ```bash
-incus-compose exec caddy caddy validate --config /config/Caddyfile --adapter caddyfile
+incus-compose exec caddy caddy fmt /config/Caddyfile
 ```
 
 ### 4. Common Error Scenarios

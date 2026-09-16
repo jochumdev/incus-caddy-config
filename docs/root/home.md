@@ -31,7 +31,7 @@ flowchart TD
     end
 
     Plugin -->|"1. SFTP write (.Caddyfile.tmp)"| Vol
-    Plugin -->|"2. Incus exec ('caddy validate')"| CaddyProc
+    Plugin -->|"2. Incus exec ('caddy fmt')"| CaddyProc
     Plugin -->|"3. SFTP atomic rename (.Caddyfile.tmp &rarr; Caddyfile)"| Vol
     Plugin -->|"4. Incus exec ('caddy reload')"| CaddyProc
 ```
@@ -84,7 +84,7 @@ When you scale, stop, start, or rename instances, Caddy reloads within milliseco
 
 - **Zero Admin Port Exposure**: Caddy's Admin API is bound strictly to `localhost:2019` inside the container. No admin port is mapped to the host or public network.
 - **Direct Storage Volume SFTP**: Configurations are written directly to the underlying Incus storage volume (`conn.GetStoragePoolVolumeFileSFTP`). If Caddy reboots or starts cold, it immediately boots with the current configuration.
-- **Safe Atomic Swaps**: Renders in-memory, writes to `/.Caddyfile.tmp`, verifies syntax with `caddy validate` inside the container, and atomically swaps via `sftp.PosixRename`. Broken configurations are rejected before touching the active site.
+- **Safe Atomic Swaps**: Renders in-memory, writes to `/.Caddyfile.tmp`, verifies and formats syntax with `caddy fmt --overwrite` inside the container, and atomically swaps via `sftp.PosixRename`. Broken configurations are rejected before touching the active site.
 - **Single Goroutine Concurrency**: State reconciliation is strictly confined to a single goroutine (Rule A4). No mutexes, lock contention, or race hazards.
 - **Warm Gating**: Changes are suppressed while the event chain is cold (`ChainCold`). Deployments only run once the fleet sweep completes (`ChainWarm`), eliminating route churn on startup.
 - **Flexible Custom Templating**: Full support for custom site blocks via inline Go templates or external template directories (`--templates-dir`).

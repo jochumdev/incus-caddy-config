@@ -263,10 +263,11 @@ func TestPluginReconcileBranches(t *testing.T) {
 
 	// 1. conn is nil: renders Caddyfile, but skips deploy without error or panic.
 	p.reconcile(ctx)
+	p.Wait()
 
 	// 2. Hash matches lastDeployed: deployment is skipped.
 	targetKey := "default/caddy-ext"
-	p.lastDeployed[targetKey] = []byte("dummy-sha")
+	p.deploy.lastDeployed[targetKey] = []byte("dummy-sha")
 
 	// 3. Template render error: handles failure gracefully and continues.
 	p.cfg.Targets = []Target{
@@ -279,6 +280,7 @@ func TestPluginReconcileBranches(t *testing.T) {
 	p.instances["default/broken"] = iutil.NewEvent(now, "instance-started", "default", "broken", "").WithInstance(brokenInst, true)
 
 	p.reconcile(ctx)
+	p.Wait()
 }
 
 func TestPluginHasTargetLabels(t *testing.T) {
@@ -341,6 +343,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 
 	ctx := context.Background()
 	p.reconcile(ctx)
+	p.Wait()
 
 	data, err := os.ReadFile(targetPath)
 	require.NoError(t, err)
@@ -348,6 +351,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 
 	// Reconcile again with same data: skipped via SHA cache.
 	p.reconcile(ctx)
+	p.Wait()
 
 	// Reconcile with broken template: handles error gracefully.
 	brokenPath := filepath.Join(tmpDir, "BrokenCaddyfile")
@@ -362,6 +366,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	}, nil, nil)
 	pBroken.instances["default/bad"] = iutil.NewEvent(now, "instance-started", "default", "bad", "").WithInstance(badInst, true)
 	pBroken.reconcile(ctx)
+	pBroken.Wait()
 
 	_, err = os.Stat(brokenPath)
 	require.True(t, os.IsNotExist(err))
@@ -413,6 +418,7 @@ func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
 
 	ctx := context.Background()
 	p.reconcile(ctx)
+	p.Wait()
 
 	dataExt, err := os.ReadFile(pathExt)
 	require.NoError(t, err)
@@ -425,4 +431,76 @@ func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
 	require.Contains(t, string(dataInt), "# internal-global-header")
 	require.NotContains(t, string(dataInt), "# external-global-header")
 	require.Contains(t, string(dataInt), "int.example.com")
+}
+
+func TestPluginRunDeployDoneAndCancel(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	p := New(logger, Config{})
+
+	inFlightCancelled := false
+	p.deploy.cancels["inflight"] = func() {
+		inFlightCancelled = true
+	}
+
+	p.deploy.cancels["dummy"] = func() {}
+
+	p.deploy.done <- deployResult{
+		targetKey: "dummy",
+		hash:      []byte("hash-123"),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	err := p.Run(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+
+	require.Equal(t, []byte("hash-123"), p.deploy.lastDeployed["dummy"])
+	require.NotContains(t, p.deploy.cancels, "dummy")
+	require.True(t, inFlightCancelled)
+}
+
+func TestPluginReconcileCancelsPreviousDeployment(t *testing.T) {
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+
+	execCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "sh", "-c", "exit 0")
+	}
+
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "Caddyfile")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	p := New(logger, Config{
+		OSTargets: []Target{
+			NewTarget("edge", map[string]string{"path": targetPath}),
+		},
+	})
+
+	now := time.Now()
+	inst1 := iutil.NewInstance(true, map[string]string{
+		"user.label.edge.domain": "v1.example.com",
+	}, nil, nil)
+	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst1, true)
+
+	ctx := context.Background()
+	p.reconcile(ctx)
+
+	targetKey := "os:edge:" + targetPath
+	prevCancel, ok := p.deploy.cancels[targetKey]
+	require.True(t, ok)
+	require.NotNil(t, prevCancel)
+
+	inst2 := iutil.NewInstance(true, map[string]string{
+		"user.label.edge.domain": "v2.example.com",
+	}, nil, nil)
+	p.instances["default/app"] = iutil.NewEvent(now, "instance-updated", "default", "app", "").WithInstance(inst2, true)
+
+	p.reconcile(ctx)
+	p.Wait()
+
+	newCancel, ok := p.deploy.cancels[targetKey]
+	require.True(t, ok)
+	require.NotNil(t, newCancel)
 }

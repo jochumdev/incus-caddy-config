@@ -82,7 +82,7 @@ caddy-config run \
 
 In this mode:
 - Staging writes to `.<base>.tmp` and atomically swaps using `os.Rename`.
-- Configuration syntax is validated locally via `caddy validate --config <staging> --adapter caddyfile`.
+- Configuration syntax is formatted and validated locally via `caddy fmt --overwrite <staging>`.
 - Caddy is reloaded locally via `caddy reload --config <path> --adapter caddyfile`. If Caddy is not currently running, the validated file remains on disk for Caddy to use upon startup.
 
 ### 3. Target Syntax & Options

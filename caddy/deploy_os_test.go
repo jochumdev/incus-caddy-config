@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -52,16 +53,16 @@ func TestDeployOSValidateFailure(t *testing.T) {
 	content := []byte("invalid content")
 	err := deployOS(context.Background(), logger, NewTarget("caddy", map[string]string{"path": targetPath}), content)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "caddy validate failed")
+	require.ErrorContains(t, err, "caddy fmt failed")
 
 	// Target file should not be created.
 	_, err = os.Stat(targetPath)
 	require.True(t, os.IsNotExist(err))
 
-	// Staging file should be cleaned up.
+	// Staging file should be preserved on failure for inspection.
 	staging := filepath.Join(tmpDir, ".Caddyfile.tmp")
 	_, err = os.Stat(staging)
-	require.True(t, os.IsNotExist(err))
+	require.NoError(t, err)
 }
 
 func TestDeployOSReloadFailureDaemonOffline(t *testing.T) {
@@ -73,7 +74,7 @@ func TestDeployOSReloadFailureDaemonOffline(t *testing.T) {
 	defer func() { execCommand = origExec }()
 
 	execCommand = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-		if len(args) > 0 && args[0] == "validate" {
+		if len(args) > 0 && args[0] == "fmt" {
 			return exec.CommandContext(ctx, "sh", "-c", "exit 0")
 		}
 
@@ -101,4 +102,26 @@ func TestDeployOSDirectoryCreationFailure(t *testing.T) {
 	err = deployOS(context.Background(), logger, NewTarget("caddy", map[string]string{"path": targetPath}), []byte("test"))
 	require.Error(t, err)
 	require.ErrorContains(t, err, "creating directory")
+}
+
+func TestDeployOSRetryCancellation(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "Caddyfile")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+
+	execCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "sh", "-c", "echo 'transient lock failure' >&2; exit 1")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(100*time.Millisecond, cancel)
+
+	start := time.Now()
+	content := []byte(":80 {\n\trespond \"test\"\n}\n")
+	err := deployOS(ctx, logger, NewTarget("caddy", map[string]string{"path": targetPath}), content)
+	require.Error(t, err)
+	require.Less(t, time.Since(start), 2*time.Second)
 }
