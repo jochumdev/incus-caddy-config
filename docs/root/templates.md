@@ -102,41 +102,47 @@ Inside your custom template, the following fields are available:
 | `.Domain` | `string` | The domain(s) defined on the instance (`user.label.<prefix>.domain`). |
 | `.Service` | `string` | The service name if defined (`user.label.<prefix>.service` or `user.incus-compose.service`). |
 | `.Upstreams` | `[]string` | Sorted list of resolved upstream addresses (e.g. `["10.0.1.5:8080", "10.0.1.6:8080"]`). |
-| `.Redirect` | `string` | The redirect URL if configured (`user.label.<prefix>.redirect`). |
-| `.Template` | `string` | The raw template name or inline template string. |
-| `.Flags` | `map[string]string` | Custom flags parsed from label definitions (e.g. `example.com,flag1=value1`). |
+| `.Redirect` | `string` | The redirect URL if configured via `redir=<url>` flag on domain. |
+| `.Template` | `string` | The raw template name or inline template string (`template=<path>` flag). |
+| `.Flags` | `map[string]string` | Custom flags parsed from label definitions (e.g. `example.com,flag1=value1,resolvers='1.1.1.1 1.0.0.1'`). Single or double quotes preserve spaces and commas. |
 
 ---
 
 ## Defining Custom Templates
 
-You can provide custom templates in two ways:
+Custom templates are specified directly on the `domain` label using the `template=<value>` flag:
 
-### 1. Inline Go Template
+### 1. External Template Directory (`--templates-dir`)
 
-Specify the template directly in the `template` label:
+For reusable site configurations, store templates in a directory mounted to `caddy-config` and pass `--templates-dir /etc/caddy/templates`.
+
+When an instance specifies a valid path with an extension (dir+file+ext, e.g. `template=spa_site.caddyfile` or `template=spa_site.tmpl`), `caddy-config` resolves it against `--templates-dir` (or uses an absolute path if provided). If the file does not exist, it fails with a 404/not-found error.
 
 ```yaml
 services:
   web:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: "spa.example.com"
+      edge.domain: "spa.example.com,template=spa_site.caddyfile"
       edge.upstream: "8080"
-      edge.template: |
-        {{ .Domain }} {
+```
+
+### 2. Inline Go Template
+
+Any template input without a file extension is evaluated as an inline Go template:
+
+```yaml
+services:
+  web:
+    image: docker.io/library/nginx:alpine
+    labels:
+      edge.domain: |
+        spa.example.com,template={{ .Domain }} {
         	encode gzip zstd
         	reverse_proxy {{ index .Upstreams 0 }}
         }
+      edge.upstream: "8080"
 ```
-
-### 2. External Template Directory (`--templates-dir`)
-
-For reusable site configurations, store templates in a directory mounted to `caddy-config` and pass `--templates-dir /etc/caddy/templates`.
-
-When an instance specifies a valid path with an extension (dir+file+ext, e.g. `edge.template: "spa_site.caddyfile"` or `edge.template: "spa_site.tmpl"`), `caddy-config` resolves it against `--templates-dir` (or uses an absolute path if provided). If the file does not exist, it fails with a 404/not-found error.
-
-Any template input without a file extension is evaluated as an inline Go template.
 
 ---
 
@@ -166,9 +172,8 @@ services:
   app:
     image: my-app:latest
     labels:
-      edge.domain: "secure.example.com"
+      edge.domain: "secure.example.com,template=secure_proxy.caddyfile"
       edge.upstream: "3000"
-      edge.template: "secure_proxy.caddyfile"
 ```
 
 ---
@@ -212,9 +217,8 @@ services:
   wordpress:
     image: docker.io/library/wordpress:fpm-alpine
     labels:
-      edge.domain: "blog.example.com"
+      edge.domain: "blog.example.com,template=php_site.caddyfile"
       edge.upstream: "9000"
-      edge.template: "php_site.caddyfile"
 ```
 
 ---

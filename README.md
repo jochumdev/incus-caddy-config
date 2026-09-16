@@ -182,14 +182,13 @@ curl -H "Host: web.example.test" http://127.0.0.1/
 
 For a target bound to prefix `edge` (`--caddy-instance edge,instance=caddy,project=default` or `--os-path edge,path=/etc/caddy/Caddyfile`):
 
-| Label in `compose.yaml` | Description                                                                                    |
-| ----------------------- | ---------------------------------------------------------------------------------------------- |
-| `edge.domain`           | **(Required)** Domain name(s) to match. Space-separated for multiple domains.                  |
-| `edge.upstream`         | Upstream port (e.g. `8080`) or `host:port` override (e.g. `10.0.1.5:8080`).                    |
-| `edge.network`          | Network interface to resolve IPv4 from (e.g. `incusbr0`). Defaults to first non-loopback IPv4. |
-| `edge.redirect`         | Target URL for permanent redirects (e.g. `https://example.com{uri}`).                          |
-| `edge.template`         | Custom vhost template name or inline template string for full site blocks.                     |
-| `edge.service`          | Custom service name override (defaults to `user.incus-compose.service`).                       |
+| Label in `compose.yaml` | Description                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `edge.domain`           | **(Required)** Domain name(s) with optional flags (e.g. `,redir=https://new.com`, `,template=custom.caddyfile`). Multiple domains separated by spaces. |
+| `edge.upstream`         | Upstream port (e.g. `8080`) or `host:port` override (e.g. `10.0.1.5:8080`).                                                           |
+| `edge.network`          | Network interface to resolve IPv4 from (e.g. `incusbr0`). Defaults to first non-loopback IPv4.                                        |
+| `edge.redirs`           | Alternate redirection domain(s) mapping to primary domain (e.g. `www.example.com,no-uri`).                                            |
+| `edge.service`          | Custom service name override (defaults to `user.incus-compose.service`).                                                              |
 
 ---
 

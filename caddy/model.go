@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/lxc/incus-compose/ievent/iutil"
 )
@@ -148,33 +149,151 @@ type parsedEntry struct {
 	Flags map[string]string
 }
 
+func trimQuotes(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 {
+		first := s[0]
+		last := s[len(s)-1]
+		quoted := (first == '"' && last == '"') || (first == '\'' && last == '\'')
+		if quoted {
+			return s[1 : len(s)-1]
+		}
+	}
+
+	return s
+}
+
+func splitTokensQuoteAware(raw string) []string {
+	var tokens []string
+	var cur strings.Builder
+	var inQuote rune
+
+	runes := []rune(raw)
+	n := len(runes)
+
+	isAdjacentToPunct := func(idx int, forward bool) bool {
+		step := 1
+		if !forward {
+			step = -1
+		}
+		for i := idx + step; i >= 0 && i < n; i += step {
+			r := runes[i]
+			if unicode.IsSpace(r) {
+				continue
+			}
+
+			return r == ',' || r == ':'
+		}
+
+		return false
+	}
+
+	for i := 0; i < n; i++ {
+		r := runes[i]
+
+		if inQuote == 0 {
+			quoteChar := r == '\'' || r == '"'
+			if quoteChar {
+				inQuote = r
+				cur.WriteRune(r)
+
+				continue
+			}
+
+			if r == ';' {
+				if cur.Len() > 0 {
+					tokens = append(tokens, cur.String())
+					cur.Reset()
+				}
+
+				continue
+			}
+
+			if unicode.IsSpace(r) {
+				adjacent := isAdjacentToPunct(i, false) || isAdjacentToPunct(i, true)
+				if adjacent {
+					continue
+				}
+
+				if cur.Len() > 0 {
+					tokens = append(tokens, cur.String())
+					cur.Reset()
+				}
+
+				continue
+			}
+
+			cur.WriteRune(r)
+		} else {
+			if r == inQuote {
+				inQuote = 0
+			}
+			cur.WriteRune(r)
+		}
+	}
+
+	if cur.Len() > 0 {
+		tokens = append(tokens, cur.String())
+	}
+
+	return tokens
+}
+
+func splitPartsQuoteAware(token string) []string {
+	var parts []string
+	var cur strings.Builder
+	var inQuote rune
+
+	for _, r := range token {
+		if inQuote == 0 {
+			quoteChar := r == '\'' || r == '"'
+			if quoteChar {
+				inQuote = r
+				cur.WriteRune(r)
+			} else if r == ',' {
+				p := strings.TrimSpace(cur.String())
+				if p != "" {
+					parts = append(parts, p)
+				}
+				cur.Reset()
+			} else {
+				cur.WriteRune(r)
+			}
+		} else {
+			if r == inQuote {
+				inQuote = 0
+			}
+			cur.WriteRune(r)
+		}
+	}
+
+	p := strings.TrimSpace(cur.String())
+	if p != "" {
+		parts = append(parts, p)
+	}
+
+	return parts
+}
+
 // parseEntries parses whitespace- or comma-separated entries with optional comma-separated flags.
 func parseEntries(raw string) []parsedEntry {
 	var entries []parsedEntry
-	raw = strings.ReplaceAll(raw, " : ", ":")
-	raw = strings.ReplaceAll(raw, ": ", ":")
-	raw = strings.ReplaceAll(raw, " :", ":")
-	raw = strings.ReplaceAll(raw, ";", " ")
-	for strings.Contains(raw, " ,") || strings.Contains(raw, ", ") {
-		raw = strings.ReplaceAll(raw, " ,", ",")
-		raw = strings.ReplaceAll(raw, ", ", ",")
-	}
-	tokens := strings.Fields(raw)
+	tokens := splitTokensQuoteAware(raw)
 
 	for _, token := range tokens {
-		token = strings.Trim(token, "\"',")
+		token = strings.Trim(token, ",")
+		token = trimQuotes(token)
 		if token == "" {
 			continue
 		}
 
-		parts := strings.Split(token, ",")
+		parts := splitPartsQuoteAware(token)
 		var currentValue string
 		var currentParts []string
 		currentFlags := make(map[string]string)
 
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
-			part = strings.Trim(part, "\"'")
 			if part == "" {
 				continue
 			}
@@ -192,8 +311,8 @@ func parseEntries(raw string) []parsedEntry {
 				currentParts = append(currentParts, part)
 			} else if strings.Contains(part, "=") {
 				k, v, _ := strings.Cut(part, "=")
-				key := strings.Trim(strings.TrimSpace(k), "\"'")
-				val := strings.Trim(strings.TrimSpace(v), "\"'")
+				key := trimQuotes(k)
+				val := trimQuotes(v)
 				isNewTarget := false
 				if key == "instance" && currentFlags["instance"] != "" && currentFlags["project"] != "" {
 					isNewTarget = true
@@ -208,13 +327,13 @@ func parseEntries(raw string) []parsedEntry {
 						Flags: currentFlags,
 					})
 					currentValue = ""
-					currentParts = []string{part}
+					currentParts = nil
 					currentFlags = make(map[string]string)
 				}
 				currentFlags[key] = val
 				currentParts = append(currentParts, part)
 			} else if currentValue == "" && len(currentFlags) == 0 {
-				currentValue = part
+				currentValue = trimQuotes(part)
 				currentParts = append(currentParts, part)
 			} else {
 				entries = append(entries, parsedEntry{
@@ -222,7 +341,7 @@ func parseEntries(raw string) []parsedEntry {
 					Value: currentValue,
 					Flags: currentFlags,
 				})
-				currentValue = part
+				currentValue = trimQuotes(part)
 				currentParts = []string{part}
 				currentFlags = make(map[string]string)
 			}
@@ -253,9 +372,6 @@ func parseRedirs(raw string) []redirEntry {
 	redirs := make([]redirEntry, 0, len(entries))
 	for _, e := range entries {
 		tmpl := e.Flags["template"]
-		if tmpl == "" {
-			tmpl = e.Flags["tmpl"]
-		}
 
 		redirs = append(redirs, redirEntry{
 			Domain:     e.Value,
@@ -296,8 +412,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		domain       string
 		upstreamPort string
 		network      string
-		redirect     string
-		tmpl         string
 		redirs       string
 	}
 	serviceConfigs := make(map[string]serviceConfig)
@@ -322,12 +436,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		network, _ := inst.ConfigValue(prefix + "network")
 		network = strings.TrimSpace(network)
 
-		redirect, _ := inst.ConfigValue(prefix + "redirect")
-		redirect = strings.TrimSpace(redirect)
-
-		tmpl, _ := inst.ConfigValue(prefix + "template")
-		tmpl = strings.TrimSpace(tmpl)
-
 		redirs, _ := inst.ConfigValue(prefix + "redirs")
 		redirs = strings.TrimSpace(redirs)
 
@@ -340,12 +448,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		}
 		if cfg.network == "" && network != "" {
 			cfg.network = network
-		}
-		if cfg.redirect == "" && redirect != "" {
-			cfg.redirect = redirect
-		}
-		if cfg.tmpl == "" && tmpl != "" {
-			cfg.tmpl = tmpl
 		}
 		if cfg.redirs == "" && redirs != "" {
 			cfg.redirs = redirs
@@ -373,12 +475,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		network, _ := inst.ConfigValue(prefix + "network")
 		network = strings.TrimSpace(network)
 
-		redirect, _ := inst.ConfigValue(prefix + "redirect")
-		redirect = strings.TrimSpace(redirect)
-
-		tmpl, _ := inst.ConfigValue(prefix + "template")
-		tmpl = strings.TrimSpace(tmpl)
-
 		if service != "" {
 			cfg := serviceConfigs[service]
 			if domain == "" {
@@ -392,12 +488,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 			}
 			if network == "" {
 				network = cfg.network
-			}
-			if redirect == "" {
-				redirect = cfg.redirect
-			}
-			if tmpl == "" {
-				tmpl = cfg.tmpl
 			}
 		}
 
@@ -441,33 +531,21 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		}
 
 		var redirectURL string
-		if redirect != "" {
-			redirEntries := parseEntries(redirect)
-			if len(redirEntries) > 0 {
-				re := redirEntries[0]
-				redirectURL = re.Value
-				includeURI := (re.Flags["uri"] != "false") && domainIncludeURI
-
-				if includeURI {
-					if !strings.HasSuffix(redirectURL, "{uri}") {
-						redirectURL += "{uri}"
-					}
-				} else {
-					redirectURL = strings.TrimSuffix(redirectURL, "{uri}")
+		redirVal, hasRedir := domainFlags["redir"]
+		if hasRedir && redirVal != "" {
+			redirectURL = redirVal
+			includeURI := (domainFlags["uri"] != "false") && domainIncludeURI
+			if includeURI {
+				hasSuffix := strings.HasSuffix(redirectURL, "{uri}")
+				if !hasSuffix {
+					redirectURL += "{uri}"
 				}
-
-				for k, v := range re.Flags {
-					domainFlags[k] = v
-				}
+			} else {
+				redirectURL = strings.TrimSuffix(redirectURL, "{uri}")
 			}
 		}
 
-		if tmpl == "" {
-			tmpl = domainFlags["template"]
-			if tmpl == "" {
-				tmpl = domainFlags["tmpl"]
-			}
-		}
+		tmpl := domainFlags["template"]
 
 		if cleanDomain != "" {
 			existing, found := vhostMap[cleanDomain]
@@ -546,9 +624,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 					}
 
 					redirTmpl := entry.Flags["template"]
-					if redirTmpl == "" {
-						redirTmpl = entry.Flags["tmpl"]
-					}
 
 					existingRedir, found := vhostMap[entry.Value]
 					if !found {

@@ -64,12 +64,10 @@ For a target bound to prefix `edge`:
 
 | Label | Description | Example |
 |---|---|---|
-| `user.label.edge.domain` | **(Required)** Domain name(s) to match, with optional flags (e.g. `example.com,flag1=value1`). Multiple domains are separated by spaces. | `api.example.com` or `app.lan web.lan` |
+| `user.label.edge.domain` | **(Required)** Domain name(s) to match, with optional flags (e.g. `redir=<url>`, `template=<file>`, `resolvers='1.1.1.1 1.0.0.1'`). Multiple domains are separated by spaces. | `api.example.com` or `app.lan,template=spa.caddyfile` |
 | `user.label.edge.upstream` | Target port or `host:port` override. If omitted, routes to container IP on default HTTP port. | `8080`, `3000`, or `10.0.1.50:9090` |
 | `user.label.edge.network` | Incus network interface name to resolve IPv4 from. Defaults to the first valid non-loopback IPv4 address. | `incusbr0`, `eth0`, or `internal` |
-| `user.label.edge.redirect` | Target URL for permanent redirects (renders `redir <url> permanent`). Defaults to appending `{uri}` unless `,no-uri` is specified. | `https://example.com` or `https://example.com,no-uri` |
 | `user.label.edge.redirs` | Plain redirection domain(s) mapping to primary domain. Options: `,uri` (default), `,no-uri`, or `,template=<file>`. | `www.example.com,no-uri old.example.com,template=redir.caddyfile` |
-| `user.label.edge.template` | Custom vhost template file in `--templates-dir` (must include extension) or an inline Go template. | `php_site.caddyfile` or inline site block |
 | `user.label.edge.service` | Custom service name override (defaults to `user.incus-compose.service`). Groups instance replicas together. | `payments-api` |
 
 ---
@@ -169,8 +167,7 @@ services:
     image: docker.io/library/busybox:latest
     command: sh -c "sleep infinity"
     labels:
-      edge.domain: "old.example.com"
-      edge.redirect: "https://new.example.com{uri}"
+      edge.domain: "old.example.com,redir=https://new.example.com{uri}"
 ```
 
 Rendered Caddyfile:

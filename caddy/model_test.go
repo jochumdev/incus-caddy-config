@@ -214,8 +214,7 @@ func TestExtractVhosts(t *testing.T) {
 		iutil.NewInstanceInterface("default", "incusbr0", true, []string{"10.0.1.7"}, nil),
 	}
 	inst3 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy2.domain":   "other.lan",
-		"user.label.caddy2.redirect": "https://example.com",
+		"user.label.caddy2.domain": "other.lan,redir=https://example.com",
 	}, ifaces3, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "other-1", "").WithInstance(inst3, true)
 
@@ -320,8 +319,7 @@ func TestExtractVhostsEdgeCases(t *testing.T) {
 
 	// 6. Instance with no IP addresses -> upstream remains empty.
 	instNoIP := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain":   "noip.lan",
-		"user.label.caddy.redirect": "https://fallback.lan",
+		"user.label.caddy.domain": "noip.lan,redir=https://fallback.lan",
 	}, nil, nil)
 	evNoIP := iutil.NewEvent(now, "instance-started", "default", "noip", "").WithInstance(instNoIP, true)
 
@@ -359,19 +357,15 @@ func TestExtractVhostsMerging(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.0.2"}, nil),
 	}
 	inst2 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain":   "multi.lan",
+		"user.label.caddy.domain":   "multi.lan,redir=https://multi.com,template=custom_tmpl",
 		"user.label.caddy.upstream": "8080",
-		"user.label.caddy.redirect": "https://multi.com",
-		"user.label.caddy.template": "custom_tmpl",
 	}, ifaces2, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "inst-2", "").WithInstance(inst2, true)
 
 	// Instance 3: same domain, duplicate upstream of inst1, attempt to overwrite redirect and template.
 	inst3 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain":   "multi.lan",
+		"user.label.caddy.domain":   "multi.lan,redir=https://overwrite.com,template=overwrite_tmpl",
 		"user.label.caddy.upstream": "8080",
-		"user.label.caddy.redirect": "https://overwrite.com",
-		"user.label.caddy.template": "overwrite_tmpl",
 	}, ifaces1, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "inst-3", "").WithInstance(inst3, true)
 
@@ -532,9 +526,8 @@ func TestExtractVhostsRedirsDeduplicationAndSelfFilter(t *testing.T) {
 
 func TestExtractVhostsRedirsWithExplicitRedirect(t *testing.T) {
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "old.com",
-		"user.label.edge.redirect": "https://new.com{uri}",
-		"user.label.edge.redirs":   "www.old.com,no-uri",
+		"user.label.edge.domain": "old.com,redir=https://new.com{uri}",
+		"user.label.edge.redirs": "www.old.com,no-uri",
 	}, nil, nil)
 	now := time.Now()
 	ev := iutil.NewEvent(now, "instance-started", "default", "redir-1", "").WithInstance(inst, true)
@@ -590,6 +583,27 @@ func TestParseEntries(t *testing.T) {
 	require.Len(t, entries, 1)
 	require.Equal(t, "true", entries[0].Flags["uri"])
 
+	// Quoted values with spaces and commas (single and double quotes).
+	entries = parseEntries("example.com,resolvers='1.1.1.1 1.0.0.1',header=\"X-Forwarded-For: 1.2.3.4, 5.6.7.8\"")
+	require.Len(t, entries, 1)
+	require.Equal(t, "example.com", entries[0].Value)
+	require.Equal(t, "1.1.1.1 1.0.0.1", entries[0].Flags["resolvers"])
+	require.Equal(t, "X-Forwarded-For: 1.2.3.4, 5.6.7.8", entries[0].Flags["header"])
+
+	// Quoted domain with space after comma before flag.
+	entries = parseEntries("'docker-registry.home.jochum.dev', resolvers=\"1.1.1.1 1.0.0.1\"")
+	require.Len(t, entries, 1)
+	require.Equal(t, "docker-registry.home.jochum.dev", entries[0].Value)
+	require.Equal(t, "1.1.1.1 1.0.0.1", entries[0].Flags["resolvers"])
+
+	// Multiple entries with quoted flags separated by whitespace.
+	entries = parseEntries("app1.test,resolvers='1.1.1.1 1.0.0.1' app2.test,resolvers=\"2.2.2.2 2.0.0.2\"")
+	require.Len(t, entries, 2)
+	require.Equal(t, "app1.test", entries[0].Value)
+	require.Equal(t, "1.1.1.1 1.0.0.1", entries[0].Flags["resolvers"])
+	require.Equal(t, "app2.test", entries[1].Value)
+	require.Equal(t, "2.2.2.2 2.0.0.2", entries[1].Flags["resolvers"])
+
 	// Empty and punctuation only.
 	require.Empty(t, parseEntries(""))
 	require.Empty(t, parseEntries("  ,  , "))
@@ -610,15 +624,13 @@ func TestExtractVhostsFlagsAndDomainModifiers(t *testing.T) {
 
 	// Instance 2: redirect with no-uri and flags.
 	inst2 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "old.example.com",
-		"user.label.edge.redirect": "https://new.example.com,no-uri,flag3=val3",
+		"user.label.edge.domain": "old.example.com,redir=https://new.example.com,no-uri,flag3=val3",
 	}, nil, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "redir-1", "").WithInstance(inst2, true)
 
 	// Instance 3: domain with no-uri affecting redirect.
 	inst3 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "legacy.example.com,no-uri",
-		"user.label.edge.redirect": "https://new.example.com",
+		"user.label.edge.domain": "legacy.example.com,redir=https://new.example.com,no-uri",
 	}, nil, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "redir-2", "").WithInstance(inst3, true)
 
@@ -643,6 +655,19 @@ func TestExtractVhostsFlagsAndDomainModifiers(t *testing.T) {
 	require.Equal(t, "https://new.example.com", vhosts[2].Redirect)
 	require.Equal(t, "false", vhosts[2].Flags["uri"])
 	require.NotContains(t, vhosts[2].Flags, "no-uri")
+
+	// 4. docker-registry with quoted resolvers and registry flags.
+	inst4 := iutil.NewInstance(true, map[string]string{
+		"user.label.edge.domain":   "docker-registry.home.jochum.dev,resolvers='1.1.1.1 1.0.0.1',registry=\"docker.io\"",
+		"user.label.edge.upstream": "8080",
+	}, ifaces, nil)
+	ev4 := iutil.NewEvent(now, "instance-started", "default", "registry-1", "").WithInstance(inst4, true)
+
+	vhostsWithQuotes := extractVhosts("edge", []*iutil.Event{ev4})
+	require.Len(t, vhostsWithQuotes, 1)
+	require.Equal(t, "docker-registry.home.jochum.dev", vhostsWithQuotes[0].Domain)
+	require.Equal(t, "1.1.1.1 1.0.0.1", vhostsWithQuotes[0].Flags["resolvers"])
+	require.Equal(t, "docker.io", vhostsWithQuotes[0].Flags["registry"])
 }
 
 func TestExtractVhostsCollectReplicasByService(t *testing.T) {

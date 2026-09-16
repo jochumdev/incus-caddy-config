@@ -274,8 +274,7 @@ func TestPluginReconcileBranches(t *testing.T) {
 		NewTarget("broken", map[string]string{"project": "default", "instance": "caddy-ext"}),
 	}
 	brokenInst := iutil.NewInstance(true, map[string]string{
-		"user.label.broken.domain":   "broken.com",
-		"user.label.broken.template": "{{ .Unclosed",
+		"user.label.broken.domain": "broken.com,template={{ .Unclosed",
 	}, nil, nil)
 	p.instances["default/broken"] = iutil.NewEvent(now, "instance-started", "default", "broken", "").WithInstance(brokenInst, true)
 
@@ -361,8 +360,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 		},
 	})
 	badInst := iutil.NewInstance(true, map[string]string{
-		"user.label.bad.domain":   "bad.test",
-		"user.label.bad.template": "{{ .Unclosed",
+		"user.label.bad.domain": "bad.test,template={{ .Unclosed",
 	}, nil, nil)
 	pBroken.instances["default/bad"] = iutil.NewEvent(now, "instance-started", "default", "bad", "").WithInstance(badInst, true)
 	pBroken.reconcile(ctx)
