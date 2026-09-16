@@ -33,13 +33,13 @@ Every flag maps to exactly **one canonical environment variable** prefixed with 
 | `--remote` | `INCUS_REMOTE` | | Connect using an existing remote from Incus CLI configuration. |
 | `--use-remote` | `INCUS_CADDY_USE_REMOTE` | `false` | Allow Incus CLI configuration files (`~/.config/incus`) to be used. |
 | `--project` | `INCUS_CADDY_PROJECTS` | | Monitored Incus project(s). Can be repeated. If empty, monitors all visible projects. |
-| `--caddy-instance` | `INCUS_CADDY_INSTANCES` | | Target Caddy server specification in `label:project:instance[,flags...]` format (repeatable or comma/space-separated). |
-| `--os-path` | `INCUS_CADDY_OS_PATH` | | Target local Caddyfile in `[label:]path[,flags...]` format (repeatable or comma/space-separated). Defaults label to `caddy`. |
+| `--caddy-instance` | `INCUS_CADDY_INSTANCES` | | Target Caddy server specification in `[label,]instance=<inst>,project=<proj>[,flags...]` format (repeatable or comma/space-separated). |
+| `--os-path` | `INCUS_CADDY_OS_PATHS` | | Target local Caddyfile in `[label,]path=<path>[,flags...]` format (repeatable or comma/space-separated). Defaults label to `caddy`. |
 | `--caddyfile-path` | `INCUS_CADDY_CADDYFILE_PATH` | `/config/Caddyfile` | Path to the active Caddyfile inside the Caddy container. |
 | `--templates-dir` | `INCUS_CADDY_TEMPLATES_DIR` | | Local path to directory containing custom vhost templates. |
 | `--debounce-window` | `INCUS_CADDY_DEBOUNCE_WINDOW` | `250ms` | Quiet period before flushing burst events to avoid redundant reloads. |
 | `--http-address` | `INCUS_CADDY_HTTP_ADDRESS` | `:9153` | Listening address for `/health` and `/ready` endpoints. Empty disables HTTP server. |
-| `--exclude` | `INCUS_CADDY_EXCLUDE` | | Optional chain stage to exclude (e.g. `http` or `debounce`). Repeatable. |
+| `--exclude` | `INCUS_CADDY_EXCLUDES` | | Optional chain stage to exclude (e.g. `http` or `debounce`). Repeatable. |
 | `--log` | `INCUS_CADDY_LOG` | `INFO` | Log level: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`. |
 | `--pprof` | `INCUS_CADDY_PPROF` | `false` | Enable Go runtime `/debug/pprof` endpoints on `--http-address`. |
 | `--workers` | `INCUS_CADDY_WORKERS` | `16` | Maximum concurrent Incus API reads during fleet enrichment sweeps. |
@@ -59,7 +59,7 @@ Used when Caddy runs in an isolated Incus container or VM. Configuration is depl
 
 ```bash
 caddy-config run \
-  --caddy-instance edge:default:caddy \
+  --caddy-instance edge,instance=caddy,project=default \
   --caddyfile-path /config/Caddyfile
 ```
 
@@ -69,15 +69,15 @@ Used when `caddy-config` runs alongside Caddy on the same host, container, or VM
 
 ```bash
 # Default label prefix "caddy" -> /etc/caddy/Caddyfile
-caddy-config run --os-path /etc/caddy/Caddyfile
+caddy-config run --os-path path=/etc/caddy/Caddyfile
 
 # Custom label prefix "edge"
-caddy-config run --os-path edge:/etc/caddy/Caddyfile
+caddy-config run --os-path edge,path=/etc/caddy/Caddyfile
 
 # Multiple local targets
 caddy-config run \
-  --os-path public:/etc/caddy/Caddyfile \
-  --os-path internal:/etc/caddy/internal.caddyfile
+  --os-path public,path=/etc/caddy/Caddyfile \
+  --os-path internal,path=/etc/caddy/internal.caddyfile
 ```
 
 In this mode:
@@ -89,16 +89,16 @@ In this mode:
 
 Both `--caddy-instance` and `--os-path` support:
 
-- **Repetition & Separation**: Targets can be passed across repeated flags, or comma- or whitespace-separated in a single flag or environment variable (`INCUS_CADDY_INSTANCES`, `INCUS_CADDY_OS_PATH`).
+- **Repetition & Separation**: Targets can be passed across repeated flags, or comma- or whitespace-separated in a single flag or environment variable (`INCUS_CADDY_INSTANCES`, `INCUS_CADDY_OS_PATHS`).
 - **Target Options / Flags**: Comma-separated `key=value` pairs appended to any target specification, such as `global_template=<path>` or `reload=<cmd>`.
 
 ```bash
-# Comma-separated instances with options
+# Instances with options
 caddy-config run \
-  --caddy-instance "public:default:caddy-prod,global_template=/etc/caddy/ext.global,internal:infra:caddy-dev"
+  --caddy-instance "public,instance=caddy-prod,project=default,global_template=/etc/caddy/ext.global internal,instance=caddy-dev,project=infra"
 
 # OS targets via environment variable with custom global template
-INCUS_CADDY_OS_PATH="/etc/caddy/Caddyfile,global_template=/etc/caddy/global.caddyfile" caddy-config run
+INCUS_CADDY_OS_PATHS="path=/etc/caddy/Caddyfile,global_template=/etc/caddy/global.caddyfile" caddy-config run
 ```
 
 ---
@@ -136,7 +136,7 @@ caddy-config run \
   --incus https://10.0.1.1:8443 \
   --client-cert /etc/ssl/caddy-config.crt \
   --client-key /etc/ssl/caddy-config.key \
-  --caddy-instance edge:default:caddy
+  --caddy-instance edge,instance=caddy,project=default
 ```
 
 ### 3. Incus CLI Configuration (`--remote`)
@@ -146,7 +146,7 @@ When running directly on a machine where the `incus` CLI is configured (`~/.conf
 caddy-config run \
   --remote ict-daily-dev01-main \
   --use-remote \
-  --caddy-instance edge:default:caddy
+  --caddy-instance edge,instance=caddy,project=default
 ```
 
 ---

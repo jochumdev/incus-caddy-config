@@ -15,7 +15,7 @@ var execCommand = exec.CommandContext
 
 // deployOS stages, validates, atomically renames, and reloads the Caddyfile on the local filesystem.
 func deployOS(ctx context.Context, logger *slog.Logger, target Target, content []byte) error {
-	caddyfilePath := target.Path
+	caddyfilePath, _ := target.Flag("path")
 	dir := filepath.Dir(caddyfilePath)
 
 	err := os.MkdirAll(dir, 0o750)

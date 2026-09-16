@@ -10,77 +10,152 @@ import (
 )
 
 func TestParseTarget(t *testing.T) {
-	// Valid 3-part.
-	target, err := ParseTarget("caddy1:myproj:caddy-server")
+	// Valid with explicit label and instance, project flags.
+	target, err := ParseTarget("caddy1,instance=caddy-server,project=myproj")
 	require.NoError(t, err)
-	require.Equal(t, Target{Label: "caddy1", Project: "myproj", Instance: "caddy-server"}, target)
+	require.Equal(t, "caddy1", target.Label)
+	inst, ok := target.Flag("instance")
+	require.True(t, ok)
+	require.Equal(t, "caddy-server", inst)
+	proj, ok := target.Flag("project")
+	require.True(t, ok)
+	require.Equal(t, "myproj", proj)
 
-	// Valid with flags.
-	targetWithFlags, err := ParseTarget("caddy1:myproj:caddy-server,flag1=val1,flag2=val2")
+	// Valid with omitted label (defaults to "caddy").
+	target, err = ParseTarget("instance=caddy-server,project=myproj")
 	require.NoError(t, err)
-	require.Equal(t, Target{
-		Label:    "caddy1",
-		Project:  "myproj",
-		Instance: "caddy-server",
-		Flags:    map[string]string{"flag1": "val1", "flag2": "val2"},
-	}, targetWithFlags)
-	require.Equal(t, "caddy1:myproj:caddy-server,flag1=val1,flag2=val2", targetWithFlags.String())
+	require.Equal(t, "caddy", target.Label)
+	inst, ok = target.Flag("instance")
+	require.True(t, ok)
+	require.Equal(t, "caddy-server", inst)
+	proj, ok = target.Flag("project")
+	require.True(t, ok)
+	require.Equal(t, "myproj", proj)
+
+	// Valid with label flag.
+	target, err = ParseTarget("instance=caddy-server,project=myproj,label=caddy1")
+	require.NoError(t, err)
+	require.Equal(t, "caddy1", target.Label)
+
+	// Valid with additional flags.
+	targetWithFlags, err := ParseTarget("caddy1,instance=caddy-server,project=myproj,flag1=val1,flag2=val2")
+	require.NoError(t, err)
+	require.Equal(t, "caddy1", targetWithFlags.Label)
+	f1, ok := targetWithFlags.Flag("flag1")
+	require.True(t, ok)
+	require.Equal(t, "val1", f1)
+	f2, ok := targetWithFlags.Flag("flag2")
+	require.True(t, ok)
+	require.Equal(t, "val2", f2)
+	require.Equal(t, "caddy1,instance=caddy-server,project=myproj,flag1=val1,flag2=val2", targetWithFlags.String())
+
+	// Duplicate flags: last input wins.
+	dupTarget, err := ParseTarget("edge,instance=first,instance=second,project=p")
+	require.NoError(t, err)
+	require.Equal(t, "edge", dupTarget.Label)
+	inst, ok = dupTarget.Flag("instance")
+	require.True(t, ok)
+	require.Equal(t, "second", inst)
+	proj, ok = dupTarget.Flag("project")
+	require.True(t, ok)
+	require.Equal(t, "p", proj)
+
+	// OS path target with default label.
+	target, err = ParseTarget("path=/etc/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, "caddy", target.Label)
+	p, ok := target.Flag("path")
+	require.True(t, ok)
+	require.Equal(t, "/etc/caddy/Caddyfile", p)
+
+	// OS path target with explicit label.
+	target, err = ParseTarget("edge,path=/etc/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, "edge", target.Label)
+	p, ok = target.Flag("path")
+	require.True(t, ok)
+	require.Equal(t, "/etc/caddy/Caddyfile", p)
 
 	// Multiple targets rejected by single ParseTarget.
-	_, err = ParseTarget("caddy1:p:i1,caddy2:p:i2")
+	_, err = ParseTarget("caddy1,instance=i1,project=p,caddy2,instance=i2,project=p")
 	require.Error(t, err)
 
-	// 2-part is not supported (requires explicit label:project:instance).
+	// Colon syntax is not supported.
+	_, err = ParseTarget("caddy1:myproj:caddy-server")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "colon syntax is not supported")
+
 	_, err = ParseTarget("external:caddy-proxy")
 	require.Error(t, err)
+	require.ErrorContains(t, err, "colon syntax is not supported")
 
-	// Invalid empty components.
-	_, err = ParseTarget("::")
-	require.Error(t, err)
-
-	_, err = ParseTarget("caddy:")
-	require.Error(t, err)
-
-	// Invalid component counts.
-	_, err = ParseTarget("single")
-	require.Error(t, err)
-
-	_, err = ParseTarget("a:b:c:d")
+	// Empty string.
+	_, err = ParseTarget("")
 	require.Error(t, err)
 }
 
 func TestParseTargets(t *testing.T) {
 	// Comma-separated.
-	targets, err := ParseTargets("t1:p1:i1,t2:p2:i2")
+	targets, err := ParseTargets("t1,instance=i1,project=p1,t2,instance=i2,project=p2")
 	require.NoError(t, err)
-	require.Equal(t, []Target{
-		{Label: "t1", Project: "p1", Instance: "i1"},
-		{Label: "t2", Project: "p2", Instance: "i2"},
-	}, targets)
+	require.Len(t, targets, 2)
+	require.Equal(t, "t1", targets[0].Label)
+	inst, _ := targets[0].Flag("instance")
+	require.Equal(t, "i1", inst)
+	proj, _ := targets[0].Flag("project")
+	require.Equal(t, "p1", proj)
+	require.Equal(t, "t2", targets[1].Label)
+	inst, _ = targets[1].Flag("instance")
+	require.Equal(t, "i2", inst)
+	proj, _ = targets[1].Flag("project")
+	require.Equal(t, "p2", proj)
 
 	// Space-separated.
-	targets, err = ParseTargets("t1:p1:i1 t2:p2:i2")
+	targets, err = ParseTargets("t1,instance=i1,project=p1 t2,instance=i2,project=p2")
 	require.NoError(t, err)
-	require.Equal(t, []Target{
-		{Label: "t1", Project: "p1", Instance: "i1"},
-		{Label: "t2", Project: "p2", Instance: "i2"},
-	}, targets)
+	require.Len(t, targets, 2)
+	require.Equal(t, "t1", targets[0].Label)
+	require.Equal(t, "t2", targets[1].Label)
 
 	// Comma-separated with flags.
-	targets, err = ParseTargets("t1:p1:i1,flag1=val1,t2:p2:i2,flag2=val2")
+	targets, err = ParseTargets("t1,instance=i1,project=p1,flag1=val1,t2,instance=i2,project=p2,flag2=val2")
 	require.NoError(t, err)
-	require.Equal(t, []Target{
-		{Label: "t1", Project: "p1", Instance: "i1", Flags: map[string]string{"flag1": "val1"}},
-		{Label: "t2", Project: "p2", Instance: "i2", Flags: map[string]string{"flag2": "val2"}},
-	}, targets)
+	require.Len(t, targets, 2)
+	f1, ok := targets[0].Flag("flag1")
+	require.True(t, ok)
+	require.Equal(t, "val1", f1)
+	f2, ok := targets[1].Flag("flag2")
+	require.True(t, ok)
+	require.Equal(t, "val2", f2)
 
 	// Space-separated with flags.
-	targets, err = ParseTargets("t1:p1:i1,flag1=val1 t2:p2:i2,flag2=val2")
+	targets, err = ParseTargets("t1,instance=i1,project=p1,flag1=val1 t2,instance=i2,project=p2,flag2=val2")
 	require.NoError(t, err)
-	require.Equal(t, []Target{
-		{Label: "t1", Project: "p1", Instance: "i1", Flags: map[string]string{"flag1": "val1"}},
-		{Label: "t2", Project: "p2", Instance: "i2", Flags: map[string]string{"flag2": "val2"}},
-	}, targets)
+	require.Len(t, targets, 2)
+	f1, ok = targets[0].Flag("flag1")
+	require.True(t, ok)
+	require.Equal(t, "val1", f1)
+	f2, ok = targets[1].Flag("flag2")
+	require.True(t, ok)
+	require.Equal(t, "val2", f2)
+
+	// OS targets comma-separated.
+	targets, err = ParseTargets("path=/etc/caddy/Caddyfile,edge,path=/var/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Len(t, targets, 2)
+	require.Equal(t, "caddy", targets[0].Label)
+	p, _ := targets[0].Flag("path")
+	require.Equal(t, "/etc/caddy/Caddyfile", p)
+	require.Equal(t, "edge", targets[1].Label)
+	p, _ = targets[1].Flag("path")
+	require.Equal(t, "/var/caddy/Caddyfile", p)
+
+	// OS targets space-separated.
+	targets, err = ParseTargets("path=/etc/caddy/Caddyfile edge,path=/var/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Len(t, targets, 2)
+	require.Equal(t, "caddy", targets[0].Label)
+	require.Equal(t, "edge", targets[1].Label)
 
 	// Empty string.
 	_, err = ParseTargets("")
@@ -91,111 +166,26 @@ func TestParseTargets(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestParseOSTarget(t *testing.T) {
-	// Bare path defaults to label "caddy".
-	target, err := ParseOSTarget("/etc/caddy/Caddyfile")
-	require.NoError(t, err)
-	require.Equal(t, Target{Label: "caddy", Path: "/etc/caddy/Caddyfile"}, target)
-
-	// Explicit label prefix.
-	target, err = ParseOSTarget("edge:/etc/caddy/Caddyfile")
-	require.NoError(t, err)
-	require.Equal(t, Target{Label: "edge", Path: "/etc/caddy/Caddyfile"}, target)
-
-	// Whitespace trimming.
-	target, err = ParseOSTarget("  myedge : /var/caddy/Caddyfile  ")
-	require.NoError(t, err)
-	require.Equal(t, Target{Label: "myedge", Path: "/var/caddy/Caddyfile"}, target)
-
-	// Windows drive letter without label prefix.
-	target, err = ParseOSTarget(`C:\caddy\Caddyfile`)
-	require.NoError(t, err)
-	require.Equal(t, Target{Label: "caddy", Path: `C:\caddy\Caddyfile`}, target)
-
-	// Windows drive letter with forward slash.
-	target, err = ParseOSTarget("D:/caddy/Caddyfile")
-	require.NoError(t, err)
-	require.Equal(t, Target{Label: "caddy", Path: "D:/caddy/Caddyfile"}, target)
-
-	// Windows drive letter with explicit label prefix.
-	target, err = ParseOSTarget(`edge:C:\caddy\Caddyfile`)
-	require.NoError(t, err)
-	require.Equal(t, Target{Label: "edge", Path: `C:\caddy\Caddyfile`}, target)
-
-	// Valid with flags.
-	targetWithFlags, err := ParseOSTarget("edge:/etc/caddy/Caddyfile,reload=custom")
-	require.NoError(t, err)
-	require.Equal(t, Target{
-		Label: "edge",
-		Path:  "/etc/caddy/Caddyfile",
-		Flags: map[string]string{"reload": "custom"},
-	}, targetWithFlags)
-	require.Equal(t, "edge:/etc/caddy/Caddyfile,reload=custom", targetWithFlags.String())
-
-	// Multiple targets rejected by single ParseOSTarget.
-	_, err = ParseOSTarget("edge:/etc/caddy/Caddyfile,custom:/var/caddy/Caddyfile")
-	require.Error(t, err)
-
-	// Invalid empty target.
-	_, err = ParseOSTarget("")
-	require.Error(t, err)
-
-	_, err = ParseOSTarget("   ")
-	require.Error(t, err)
-
-	// Invalid empty path.
-	_, err = ParseOSTarget("edge:")
-	require.Error(t, err)
-
-	_, err = ParseOSTarget(":")
-	require.Error(t, err)
-}
-
-func TestParseOSTargets(t *testing.T) {
-	// Comma-separated.
-	targets, err := ParseOSTargets("/etc/caddy/Caddyfile,edge:/var/caddy/Caddyfile")
-	require.NoError(t, err)
-	require.Equal(t, []Target{
-		{Label: "caddy", Path: "/etc/caddy/Caddyfile"},
-		{Label: "edge", Path: "/var/caddy/Caddyfile"},
-	}, targets)
-
-	// Space-separated.
-	targets, err = ParseOSTargets("/etc/caddy/Caddyfile edge:/var/caddy/Caddyfile")
-	require.NoError(t, err)
-	require.Equal(t, []Target{
-		{Label: "caddy", Path: "/etc/caddy/Caddyfile"},
-		{Label: "edge", Path: "/var/caddy/Caddyfile"},
-	}, targets)
-
-	// With flags.
-	targets, err = ParseOSTargets("caddy:/etc/caddy,flag1=1 edge:/var/caddy,flag2=2")
-	require.NoError(t, err)
-	require.Equal(t, []Target{
-		{Label: "caddy", Path: "/etc/caddy", Flags: map[string]string{"flag1": "1"}},
-		{Label: "edge", Path: "/var/caddy", Flags: map[string]string{"flag2": "2"}},
-	}, targets)
-
-	// Empty.
-	_, err = ParseOSTargets("")
-	require.Error(t, err)
-}
-
 func TestTargetGlobalTemplate(t *testing.T) {
 	// From file path flag.
-	target, err := ParseTarget("edge:default:caddy,global_template=/etc/caddy/global.caddyfile")
+	target, err := ParseTarget("edge,instance=caddy,project=default,global_template=/etc/caddy/global.caddyfile")
 	require.NoError(t, err)
-	require.Equal(t, "/etc/caddy/global.caddyfile", target.GlobalTemplate())
+	tmpl, ok := target.Flag("global_template")
+	require.True(t, ok)
+	require.Equal(t, "/etc/caddy/global.caddyfile", tmpl)
 
 	// From hyphenated flag name.
-	target, err = ParseTarget("edge:default:caddy,global-template=/etc/caddy/global.caddyfile")
+	target, err = ParseTarget("edge,instance=caddy,project=default,global-template=/etc/caddy/global.caddyfile")
 	require.NoError(t, err)
-	require.Equal(t, "/etc/caddy/global.caddyfile", target.GlobalTemplate())
+	tmpl, ok = target.Flag("global-template")
+	require.True(t, ok)
+	require.Equal(t, "/etc/caddy/global.caddyfile", tmpl)
 
 	// No global template flag.
-	target, err = ParseTarget("edge:default:caddy")
+	target, err = ParseTarget("edge,instance=caddy,project=default")
 	require.NoError(t, err)
-	require.Empty(t, target.GlobalTemplate())
+	_, ok = target.Flag("global_template")
+	require.False(t, ok)
 }
 
 func TestExtractVhosts(t *testing.T) {
@@ -528,14 +518,40 @@ func TestParseEntries(t *testing.T) {
 	require.Len(t, entries, 2)
 
 	require.Equal(t, "example.com", entries[0].Value)
-	require.False(t, entries[0].IncludeURI)
 	require.Equal(t, "val1", entries[0].Flags["flag1"])
-	require.Equal(t, "true", entries[0].Flags["no-uri"])
+	require.Equal(t, "false", entries[0].Flags["uri"])
+	require.NotContains(t, entries[0].Flags, "no-uri")
 
 	require.Equal(t, "api.example.com", entries[1].Value)
-	require.True(t, entries[1].IncludeURI)
 	require.Equal(t, "val2", entries[1].Flags["flag2"])
 	require.Equal(t, "true", entries[1].Flags["uri"])
+
+	// uri=true is same as uri, uri=false is same as no-uri.
+	entries = parseEntries("example.com,uri=true old.example.com,uri=false")
+	require.Len(t, entries, 2)
+	require.Equal(t, "true", entries[0].Flags["uri"])
+	require.Equal(t, "false", entries[1].Flags["uri"])
+
+	// Any value-less flag with no- prefix has no- stripped.
+	entries = parseEntries("example.com,no-cache")
+	require.Len(t, entries, 1)
+	require.Equal(t, "false", entries[0].Flags["cache"])
+	require.NotContains(t, entries[0].Flags, "no-cache")
+
+	// Duplicate flags: last input wins.
+	entries = parseEntries("example.com,k=v1,k=v2,no-uri,uri")
+	require.Len(t, entries, 1)
+	require.Equal(t, "v2", entries[0].Flags["k"])
+	require.Equal(t, "true", entries[0].Flags["uri"])
+	require.NotContains(t, entries[0].Flags, "no-uri")
+
+	entries = parseEntries("example.com,uri,no-uri")
+	require.Len(t, entries, 1)
+	require.Equal(t, "false", entries[0].Flags["uri"])
+
+	entries = parseEntries("example.com,no-uri,uri=true")
+	require.Len(t, entries, 1)
+	require.Equal(t, "true", entries[0].Flags["uri"])
 
 	// Empty and punctuation only.
 	require.Empty(t, parseEntries(""))
@@ -582,12 +598,14 @@ func TestExtractVhostsFlagsAndDomainModifiers(t *testing.T) {
 	require.Equal(t, "old.example.com", vhosts[1].Domain)
 	require.Equal(t, "https://new.example.com", vhosts[1].Redirect)
 	require.Equal(t, "val3", vhosts[1].Flags["flag3"])
-	require.Equal(t, "true", vhosts[1].Flags["no-uri"])
+	require.Equal(t, "false", vhosts[1].Flags["uri"])
+	require.NotContains(t, vhosts[1].Flags, "no-uri")
 
 	// 3. legacy.example.com -> stripped {uri} due to no-uri on domain
 	require.Equal(t, "legacy.example.com", vhosts[2].Domain)
 	require.Equal(t, "https://new.example.com", vhosts[2].Redirect)
-	require.Equal(t, "true", vhosts[2].Flags["no-uri"])
+	require.Equal(t, "false", vhosts[2].Flags["uri"])
+	require.NotContains(t, vhosts[2].Flags, "no-uri")
 }
 
 func TestExtractVhostsCollectReplicasByService(t *testing.T) {

@@ -64,7 +64,7 @@ volumes:
   data:
 ```
 
-When `caddy-config` runs with `--caddy-instance edge:default:caddy`, it automatically discovers `api`, resolves its Incus bridge IPv4 address, and renders the reverse proxy block into Caddy:
+When `caddy-config` runs with `--caddy-instance edge,instance=caddy,project=default`, it automatically discovers `api`, resolves its Incus bridge IPv4 address, and renders the reverse proxy block into Caddy:
 
 ```caddyfile
 {

@@ -116,15 +116,15 @@ func runCommand(cfg *config) *cli.Command {
 			},
 			&TargetFlag{
 				Name:        "caddy-instance",
-				Usage:       "Target Caddy server in format 'label:project:instance[,flags...]'; repeatable or comma/space-separated",
+				Usage:       "Target Caddy server in format '[label,]instance=<inst>,project=<proj>[,flags...]'; repeatable or comma/space-separated",
 				Destination: &cfg.Targets,
 				Sources:     cli.EnvVars("INCUS_CADDY_INSTANCES"),
 			},
 			&TargetFlag{
 				Name:        "os-path",
-				Usage:       "Target local Caddyfile in format '[label:]path[,flags...]'; repeatable or comma/space-separated",
+				Usage:       "Target local Caddyfile in format '[label,]path=<path>[,flags...]'; repeatable or comma/space-separated",
 				Destination: &cfg.OSTargets,
-				Sources:     cli.EnvVars("INCUS_CADDY_OS_PATH"),
+				Sources:     cli.EnvVars("INCUS_CADDY_OS_PATHS"),
 			},
 			&cli.StringFlag{
 				Name:        "caddyfile-path",
@@ -157,7 +157,7 @@ func runCommand(cfg *config) *cli.Command {
 				Name:        "exclude",
 				Usage:       "Chain position(s) to leave out; only optional ones",
 				Destination: &cfg.Exclude,
-				Sources:     cli.EnvVars("INCUS_CADDY_EXCLUDE"),
+				Sources:     cli.EnvVars("INCUS_CADDY_EXCLUDES"),
 			},
 			&cli.StringFlag{
 				Name:        "log",

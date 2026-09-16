@@ -86,7 +86,7 @@ func TestE2ECaddyReverseProxy(t *testing.T) {
 	defer configCancel()
 
 	cfg := newConfig()
-	cfg.Targets = []caddy.Target{{Label: "edge", Project: project, Instance: "caddy"}}
+	cfg.Targets = []caddy.Target{caddy.NewTarget("edge", map[string]string{"project": project, "instance": "caddy"})}
 	cfg.Projects = []string{project}
 	cfg.Remote = incusRemote()
 	cfg.UseRemote = true

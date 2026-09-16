@@ -22,23 +22,23 @@ leafwiki_last_author_id: system
 `caddy-config` connects a label prefix to a target Caddy server using `--caddy-instance` (for Incus containers/VMs) or `--os-path` (for local OS deployment):
 
 ```text
---caddy-instance <label>:<project>:<instance>[,<key>=<value>...]
---os-path [<label>:]<path>[,<key>=<value>...]
+--caddy-instance [<label>,]instance=<instance>,project=<project>[,<key>=<value>...]
+--os-path [<label>,]path=<path>[,<key>=<value>...]
 ```
 
 For example:
 ```bash
 # Remote Incus instance
---caddy-instance edge:default:caddy-prod
+--caddy-instance edge,instance=caddy-prod,project=default
 
 # Remote Incus instance with custom flags (e.g. global template)
---caddy-instance edge:default:caddy-prod,global_template=/etc/caddy/global.caddyfile
+--caddy-instance edge,instance=caddy-prod,project=default,global_template=/etc/caddy/global.caddyfile
 
 # Local OS Caddyfile (defaults to label "caddy")
---os-path /etc/caddy/Caddyfile
+--os-path path=/etc/caddy/Caddyfile
 
 # Local OS Caddyfile with custom label prefix and reload flag
---os-path edge:/etc/caddy/Caddyfile,reload=custom
+--os-path edge,path=/etc/caddy/Caddyfile,reload=custom
 ```
 
 Targets can be specified multiple times, or comma- or whitespace-separated within a single flag or environment variable, to route different subsets of services to distinct Caddy targets.

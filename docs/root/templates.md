@@ -52,20 +52,20 @@ You specify a custom global template directly on each target using the `global_t
 **As a file path:**
 ```bash
 caddy-config run \
-  --caddy-instance edge:default:caddy,global_template=/etc/caddy/global.caddyfile
+  --caddy-instance edge,instance=caddy,project=default,global_template=/etc/caddy/global.caddyfile
 ```
 
 **Targeted multi-instance configuration:**
 ```bash
 caddy-config run \
-  --caddy-instance external:default:caddy-external,global_template=/etc/caddy/external.global.caddyfile \
-  --caddy-instance internal:default:caddy-internal,global_template=/etc/caddy/internal.global.caddyfile
+  --caddy-instance external,instance=caddy-external,project=default,global_template=/etc/caddy/external.global.caddyfile \
+  --caddy-instance internal,instance=caddy-internal,project=default,global_template=/etc/caddy/internal.global.caddyfile
 ```
 
 **Co-located OS deployment:**
 ```bash
 caddy-config run \
-  --os-path edge:/etc/caddy/Caddyfile,global_template=/etc/caddy/global.caddyfile
+  --os-path edge,path=/etc/caddy/Caddyfile,global_template=/etc/caddy/global.caddyfile
 ```
 
 Any deployment target that does not configure `global_template` uses the default minimal options block (`{ admin localhost:2019 }`).

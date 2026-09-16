@@ -11,60 +11,57 @@ import (
 
 // Target represents a Caddy server destination bound to a specific route label.
 type Target struct {
-	Label    string
-	Project  string
-	Instance string
-	Path     string
-	Flags    map[string]string
+	raw   string
+	Label string
+	flags map[string]string
 }
 
-// IsOS reports whether the target points to a local filesystem Caddyfile rather than an Incus container.
-func (t Target) IsOS() bool {
-	return t.Path != ""
+// NewTarget creates a Target with the given label and flags.
+func NewTarget(label string, flags map[string]string) Target {
+	t := Target{
+		Label: label,
+		flags: flags,
+	}
+	t.raw = t.String()
+
+	return t
 }
 
-// GlobalTemplate returns the custom global template file path from target flags, if configured.
-func (t Target) GlobalTemplate() string {
-	if tmpl, ok := t.Flags["global_template"]; ok {
-		return tmpl
+// Flag returns the value of a target flag and whether it was present.
+func (t Target) Flag(key string) (string, bool) {
+	if t.flags == nil {
+		return "", false
 	}
 
-	return t.Flags["global-template"]
+	v, ok := t.flags[key]
+	return v, ok
 }
 
-// String returns the string representation of Target,
-// including comma-separated flags if present.
+// String returns the raw input string representation of Target for logging.
 func (t Target) String() string {
-	var base string
-	if t.IsOS() {
-		if t.Label == "caddy" || t.Label == "" {
-			base = t.Path
-		} else {
-			base = fmt.Sprintf("%s:%s", t.Label, t.Path)
-		}
-	} else {
-		base = fmt.Sprintf("%s:%s:%s", t.Label, t.Project, t.Instance)
+	if t.raw != "" {
+		return t.raw
 	}
 
-	if len(t.Flags) == 0 {
-		return base
+	label := t.Label
+	if label == "" {
+		label = "caddy"
 	}
 
-	keys := make([]string, 0, len(t.Flags))
-	for k := range t.Flags {
+	if len(t.flags) == 0 {
+		return label
+	}
+
+	parts := []string{label}
+	keys := make([]string, 0, len(t.flags))
+	for k := range t.flags {
 		keys = append(keys, k)
 	}
 
 	slices.Sort(keys)
 
-	parts := []string{base}
 	for _, k := range keys {
-		v := t.Flags[k]
-		if (k == "uri" || k == "no-uri") && v == "true" {
-			parts = append(parts, k)
-		} else {
-			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
-		}
+		parts = append(parts, fmt.Sprintf("%s=%s", k, t.flags[k]))
 	}
 
 	return strings.Join(parts, ",")
@@ -90,7 +87,7 @@ func ParseTargets(s string) ([]Target, error) {
 	return targets, nil
 }
 
-// ParseTarget parses a single "label:project:instance" specification with optional flags.
+// ParseTarget parses a single target specification with flags.
 func ParseTarget(s string) (Target, error) {
 	targets, err := ParseTargets(s)
 	if err != nil {
@@ -101,123 +98,37 @@ func ParseTarget(s string) (Target, error) {
 		return Target{}, fmt.Errorf("invalid target %q: expected single target", s)
 	}
 
-	if targets[0].IsOS() {
-		return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance'", s)
-	}
-
-	return targets[0], nil
-}
-
-// ParseOSTargets parses whitespace- or comma-separated OS targets with optional comma-separated flags.
-func ParseOSTargets(s string) ([]Target, error) {
-	targets, err := ParseTargets(s)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, t := range targets {
-		if !t.IsOS() {
-			return nil, fmt.Errorf("invalid OS target: expected '[label:]path'")
-		}
-	}
-
-	return targets, nil
-}
-
-// ParseOSTarget parses a single "[label:]path" specification, defaulting to label "caddy" if omitted.
-func ParseOSTarget(s string) (Target, error) {
-	targets, err := ParseTargets(s)
-	if err != nil {
-		return Target{}, err
-	}
-
-	if len(targets) != 1 {
-		return Target{}, fmt.Errorf("invalid OS target %q: expected single target", s)
-	}
-
-	if !targets[0].IsOS() {
-		return Target{}, fmt.Errorf("invalid OS target %q: expected '[label:]path'", s)
-	}
-
 	return targets[0], nil
 }
 
 func parseTargetEntry(e parsedEntry) (Target, error) {
-	val := e.Value
-	if val == "" {
+	if e.Value == "" && len(e.Flags) == 0 {
 		return Target{}, fmt.Errorf("empty target")
 	}
 
-	var flags map[string]string
-	if len(e.Flags) > 0 {
-		flags = e.Flags
+	flags := e.Flags
+	if flags == nil {
+		flags = make(map[string]string)
 	}
 
-	// 1. Bare OS path (starts with / or .)
-	idx := strings.Index(val, ":")
-	if idx == -1 {
-		if strings.HasPrefix(val, "/") || strings.HasPrefix(val, ".") {
-			return Target{Label: "caddy", Path: val, Flags: flags}, nil
-		}
-
-		return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance' or '[label:]path'", val)
+	label := e.Value
+	if l, ok := flags["label"]; ok && l != "" {
+		label = l
 	}
 
-	// 2. Bare Windows drive letter (e.g. C:\... or C:/...)
-	if isWindowsDrive(val) {
-		return Target{Label: "caddy", Path: val, Flags: flags}, nil
+	if label == "" {
+		label = "caddy"
 	}
 
-	// 3. Windows drive letter with explicit label prefix (e.g. edge:C:\...)
-	rem := val[idx+1:]
-	if isWindowsDrive(rem) {
-		label := strings.TrimSpace(val[:idx])
-		if label == "" {
-			label = "caddy"
-		}
-
-		return Target{Label: label, Path: rem, Flags: flags}, nil
+	if strings.Contains(e.Value, ":") {
+		return Target{}, fmt.Errorf("invalid target %q: colon syntax is not supported, use flags (key=value)", e.Raw)
 	}
 
-	// 4. Split by colons: 2 parts = OS target [label:]path, 3 parts = Incus target label:project:instance
-	parts := strings.Split(val, ":")
-	if len(parts) == 2 {
-		label := strings.TrimSpace(parts[0])
-		path := strings.TrimSpace(parts[1])
-		if label == "" {
-			label = "caddy"
-		}
-
-		if path == "" {
-			return Target{}, fmt.Errorf("invalid OS target %q: empty path", val)
-		}
-
-		if !strings.ContainsAny(path, "/\\") && !strings.HasPrefix(path, ".") {
-			return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance' or '[label:]path'", val)
-		}
-
-		return Target{Label: label, Path: path, Flags: flags}, nil
-	}
-
-	if len(parts) == 3 {
-		if parts[0] == "" || parts[1] == "" || parts[2] == "" {
-			return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance'", val)
-		}
-
-		return Target{
-			Label:    parts[0],
-			Project:  parts[1],
-			Instance: parts[2],
-			Flags:    flags,
-		}, nil
-	}
-
-	return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance' or '[label:]path'", val)
-}
-
-func isWindowsDrive(s string) bool {
-	return len(s) > 2 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') &&
-		((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z'))
+	return Target{
+		raw:   e.Raw,
+		Label: label,
+		flags: flags,
+	}, nil
 }
 
 // vhost holds the model data needed to render a Caddyfile site block.
@@ -232,9 +143,9 @@ type vhost struct {
 
 // parsedEntry represents a parsed domain or target with associated flags.
 type parsedEntry struct {
-	Value      string
-	Flags      map[string]string
-	IncludeURI bool
+	Raw   string
+	Value string
+	Flags map[string]string
 }
 
 // parseEntries parses whitespace- or comma-separated entries with optional comma-separated flags.
@@ -243,59 +154,87 @@ func parseEntries(raw string) []parsedEntry {
 	raw = strings.ReplaceAll(raw, " : ", ":")
 	raw = strings.ReplaceAll(raw, ": ", ":")
 	raw = strings.ReplaceAll(raw, " :", ":")
+	raw = strings.ReplaceAll(raw, ";", " ")
+	for strings.Contains(raw, " ,") || strings.Contains(raw, ", ") {
+		raw = strings.ReplaceAll(raw, " ,", ",")
+		raw = strings.ReplaceAll(raw, ", ", ",")
+	}
 	tokens := strings.Fields(raw)
 
 	for _, token := range tokens {
-		token = strings.Trim(token, ",")
+		token = strings.Trim(token, "\"',")
 		if token == "" {
 			continue
 		}
 
 		parts := strings.Split(token, ",")
-		currentValue := strings.TrimSpace(parts[0])
-		if currentValue == "" {
-			continue
-		}
-
+		var currentValue string
+		var currentParts []string
 		currentFlags := make(map[string]string)
-		currentIncludeURI := true
 
-		for _, part := range parts[1:] {
+		for _, part := range parts {
 			part = strings.TrimSpace(part)
+			part = strings.Trim(part, "\"'")
 			if part == "" {
 				continue
 			}
 
 			lower := strings.ToLower(part)
-			switch lower {
-			case "no-uri":
-				currentIncludeURI = false
-				currentFlags["no-uri"] = "true"
-			case "uri":
-				currentIncludeURI = true
+			if lower == "uri" {
 				currentFlags["uri"] = "true"
-			default:
-				if strings.Contains(part, "=") {
-					k, v, _ := strings.Cut(part, "=")
-					currentFlags[strings.TrimSpace(k)] = strings.TrimSpace(v)
-				} else {
-					entries = append(entries, parsedEntry{
-						Value:      currentValue,
-						Flags:      currentFlags,
-						IncludeURI: currentIncludeURI,
-					})
-					currentValue = part
-					currentFlags = make(map[string]string)
-					currentIncludeURI = true
+				currentParts = append(currentParts, part)
+			} else if lower == "no-uri" {
+				currentFlags["uri"] = "false"
+				currentParts = append(currentParts, part)
+			} else if strings.HasPrefix(lower, "no-") && len(lower) > 3 && (currentValue != "" || len(currentFlags) > 0) {
+				key := strings.TrimPrefix(lower, "no-")
+				currentFlags[key] = "false"
+				currentParts = append(currentParts, part)
+			} else if strings.Contains(part, "=") {
+				k, v, _ := strings.Cut(part, "=")
+				key := strings.Trim(strings.TrimSpace(k), "\"'")
+				val := strings.Trim(strings.TrimSpace(v), "\"'")
+				isNewTarget := false
+				if key == "instance" && currentFlags["instance"] != "" && currentFlags["project"] != "" {
+					isNewTarget = true
+				} else if key == "path" && currentFlags["path"] != "" && currentValue == "" {
+					isNewTarget = true
 				}
+
+				if isNewTarget {
+					entries = append(entries, parsedEntry{
+						Raw:   strings.Join(currentParts, ","),
+						Value: currentValue,
+						Flags: currentFlags,
+					})
+					currentValue = ""
+					currentParts = []string{part}
+					currentFlags = make(map[string]string)
+				}
+				currentFlags[key] = val
+				currentParts = append(currentParts, part)
+			} else if currentValue == "" && len(currentFlags) == 0 {
+				currentValue = part
+				currentParts = append(currentParts, part)
+			} else {
+				entries = append(entries, parsedEntry{
+					Raw:   strings.Join(currentParts, ","),
+					Value: currentValue,
+					Flags: currentFlags,
+				})
+				currentValue = part
+				currentParts = []string{part}
+				currentFlags = make(map[string]string)
 			}
 		}
 
-		entries = append(entries, parsedEntry{
-			Value:      currentValue,
-			Flags:      currentFlags,
-			IncludeURI: currentIncludeURI,
-		})
+		if currentValue != "" || len(currentFlags) > 0 {
+			entries = append(entries, parsedEntry{
+				Raw:   strings.Join(currentParts, ","),
+				Value: currentValue,
+				Flags: currentFlags,
+			})
+		}
 	}
 
 	return entries
@@ -314,7 +253,7 @@ func parseRedirs(raw string) []redirEntry {
 	for _, e := range entries {
 		redirs = append(redirs, redirEntry{
 			Domain:     e.Value,
-			IncludeURI: e.IncludeURI,
+			IncludeURI: e.Flags["uri"] != "false",
 		})
 	}
 	return redirs
@@ -483,7 +422,7 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 				if de.Value != "" {
 					domainNames = append(domainNames, de.Value)
 				}
-				if !de.IncludeURI {
+				if de.Flags["uri"] == "false" {
 					domainIncludeURI = false
 				}
 				for k, v := range de.Flags {
@@ -499,7 +438,7 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 			if len(redirEntries) > 0 {
 				re := redirEntries[0]
 				redirectURL = re.Value
-				includeURI := re.IncludeURI && domainIncludeURI
+				includeURI := (re.Flags["uri"] != "false") && domainIncludeURI
 
 				if includeURI {
 					if !strings.HasSuffix(redirectURL, "{uri}") {
@@ -583,7 +522,7 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 					}
 
 					targetURL := baseTarget
-					if entry.IncludeURI {
+					if entry.Flags["uri"] != "false" {
 						if !strings.HasSuffix(targetURL, "{uri}") {
 							targetURL += "{uri}"
 						}

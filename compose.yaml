@@ -42,7 +42,7 @@ services:
         condition: service_healthy
     environment:
       INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:?Incus HTTPS API endpoint is required, e.g. https://10.0.0.1:8443}"
-      INCUS_CADDY_INSTANCES: "${CADDY_LABEL:-caddy}:${INCUS_PROJECT:-default}:caddy"
+      INCUS_CADDY_INSTANCES: "${CADDY_LABEL:-caddy},instance=caddy,project=${INCUS_PROJECT:-default}"
       INCUS_CADDY_CADDYFILE_PATH: /config/Caddyfile
       INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
       INCUS_CADDY_SECRETS_DIR: /run/secrets

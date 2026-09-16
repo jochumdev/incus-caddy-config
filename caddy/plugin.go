@@ -237,7 +237,11 @@ func (p *Plugin) reconcile(ctx context.Context) {
 	for _, target := range p.cfg.Targets {
 		vhosts := extractVhosts(target.Label, instances)
 
-		globalTmpl := target.GlobalTemplate()
+		globalTmpl, _ := target.Flag("global_template")
+		if globalTmpl == "" {
+			globalTmpl, _ = target.Flag("global-template")
+		}
+
 		content, err := render(vhosts, p.cfg.TemplatesDir, globalTmpl)
 		if err != nil {
 			p.logger.Error("rendering Caddyfile", "label", target.Label, "err", err)
@@ -246,7 +250,9 @@ func (p *Plugin) reconcile(ctx context.Context) {
 		}
 
 		sum := sha256.Sum256(content)
-		targetKey := target.Project + "/" + target.Instance
+		project, _ := target.Flag("project")
+		instance, _ := target.Flag("instance")
+		targetKey := project + "/" + instance
 
 		last := p.lastDeployed[targetKey]
 		if bytes.Equal(last, sum[:]) {
@@ -270,16 +276,21 @@ func (p *Plugin) reconcile(ctx context.Context) {
 	for _, target := range p.cfg.OSTargets {
 		vhosts := extractVhosts(target.Label, instances)
 
-		globalTmpl := target.GlobalTemplate()
+		globalTmpl, _ := target.Flag("global_template")
+		if globalTmpl == "" {
+			globalTmpl, _ = target.Flag("global-template")
+		}
+
 		content, err := render(vhosts, p.cfg.TemplatesDir, globalTmpl)
 		if err != nil {
-			p.logger.Error("rendering Caddyfile for OS target", "label", target.Label, "path", target.Path, "err", err)
+			p.logger.Error("rendering Caddyfile for OS target", "label", target.Label, "target", target.String(), "err", err)
 
 			continue
 		}
 
 		sum := sha256.Sum256(content)
-		targetKey := "os:" + target.Label + ":" + target.Path
+		path, _ := target.Flag("path")
+		targetKey := "os:" + target.Label + ":" + path
 
 		last := p.lastDeployed[targetKey]
 		if bytes.Equal(last, sum[:]) {
@@ -288,7 +299,7 @@ func (p *Plugin) reconcile(ctx context.Context) {
 
 		err = deployOS(ctx, p.logger, target, content)
 		if err != nil {
-			p.logger.Error("deploying Caddyfile to OS path", "label", target.Label, "path", target.Path, "err", err)
+			p.logger.Error("deploying Caddyfile to OS path", "label", target.Label, "path", path, "err", err)
 
 			continue
 		}

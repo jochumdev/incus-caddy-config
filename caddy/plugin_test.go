@@ -19,7 +19,7 @@ func TestPluginBasics(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := Config{
 		Targets: []Target{
-			{Label: "caddy1", Project: "default", Instance: "caddy-ext"},
+			NewTarget("caddy1", map[string]string{"project": "default", "instance": "caddy-ext"}),
 		},
 		CaddyfilePath: "/config/Caddyfile",
 	}
@@ -49,7 +49,7 @@ func TestPluginProcessEvent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			{Label: "caddy", Project: "default", Instance: "caddy-ext"},
+			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
 		},
 	})
 
@@ -102,7 +102,7 @@ func TestPluginRunCommandDrain(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			{Label: "caddy", Project: "default", Instance: "caddy-ext"},
+			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
 		},
 	})
 
@@ -209,7 +209,7 @@ func TestPluginProcessEventExtended(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			{Label: "caddy", Project: "default", Instance: "caddy-ext"},
+			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
 		},
 	})
 
@@ -247,7 +247,7 @@ func TestPluginReconcileBranches(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			{Label: "caddy", Project: "default", Instance: "caddy-ext"},
+			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
 		},
 		CaddyfilePath: "/config/Caddyfile",
 	})
@@ -270,7 +270,7 @@ func TestPluginReconcileBranches(t *testing.T) {
 
 	// 3. Template render error: handles failure gracefully and continues.
 	p.cfg.Targets = []Target{
-		{Label: "broken", Project: "default", Instance: "caddy-ext"},
+		NewTarget("broken", map[string]string{"project": "default", "instance": "caddy-ext"}),
 	}
 	brokenInst := iutil.NewInstance(true, map[string]string{
 		"user.label.broken.domain":   "broken.com",
@@ -284,7 +284,7 @@ func TestPluginReconcileBranches(t *testing.T) {
 func TestPluginHasTargetLabels(t *testing.T) {
 	p := New(nil, Config{
 		Targets: []Target{
-			{Label: "web", Project: "default", Instance: "caddy"},
+			NewTarget("web", map[string]string{"project": "default", "instance": "caddy"}),
 		},
 	})
 
@@ -306,7 +306,7 @@ func TestPluginHasTargetLabels(t *testing.T) {
 	// Match via OSTargets.
 	pOS := New(nil, Config{
 		OSTargets: []Target{
-			{Label: "local", Path: "/etc/caddy/Caddyfile"},
+			NewTarget("local", map[string]string{"path": "/etc/caddy/Caddyfile"}),
 		},
 	})
 	instOSMatch := iutil.NewInstance(true, map[string]string{
@@ -329,7 +329,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 
 	p := New(logger, Config{
 		OSTargets: []Target{
-			{Label: "edge", Path: targetPath},
+			NewTarget("edge", map[string]string{"path": targetPath}),
 		},
 	})
 
@@ -353,7 +353,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	brokenPath := filepath.Join(tmpDir, "BrokenCaddyfile")
 	pBroken := New(logger, Config{
 		OSTargets: []Target{
-			{Label: "bad", Path: brokenPath},
+			NewTarget("bad", map[string]string{"path": brokenPath}),
 		},
 	})
 	badInst := iutil.NewInstance(true, map[string]string{
@@ -389,16 +389,14 @@ func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
 
 	p := New(logger, Config{
 		OSTargets: []Target{
-			{
-				Label: "caddy-external",
-				Path:  pathExt,
-				Flags: map[string]string{"global_template": tmplExtFile},
-			},
-			{
-				Label: "caddy-internal",
-				Path:  pathInt,
-				Flags: map[string]string{"global_template": tmplIntFile},
-			},
+			NewTarget("caddy-external", map[string]string{
+				"path":            pathExt,
+				"global_template": tmplExtFile,
+			}),
+			NewTarget("caddy-internal", map[string]string{
+				"path":            pathInt,
+				"global_template": tmplIntFile,
+			}),
 		},
 	})
 

@@ -39,9 +39,9 @@ func TestRunCommandFlags(t *testing.T) {
 		"--restricted",
 		"--project", "alpha",
 		"--project", "beta",
-		"--caddy-instance", "external:default:caddy-prod,global_template=/etc/caddy/templates/global.caddyfile",
-		"--os-path", "/etc/caddy/Caddyfile",
-		"--os-path", "edge:/var/caddy/Caddyfile",
+		"--caddy-instance", "external,instance=caddy-prod,project=default,global_template=/etc/caddy/templates/global.caddyfile",
+		"--os-path", "path=/etc/caddy/Caddyfile",
+		"--os-path", "edge,path=/var/caddy/Caddyfile",
 		"--caddyfile-path", "/etc/caddy/Caddyfile",
 		"--templates-dir", "/etc/caddy/templates",
 		"--debounce-window", "500ms",
@@ -67,17 +67,22 @@ func TestRunCommandFlags(t *testing.T) {
 	require.Equal(t, "/tmp/key.pem", cfg.ClientKey)
 	require.True(t, cfg.Restricted)
 	require.Equal(t, []string{"alpha", "beta"}, cfg.Projects)
-	require.Equal(t, []caddy.Target{{
-		Label:    "external",
-		Project:  "default",
-		Instance: "caddy-prod",
-		Flags:    map[string]string{"global_template": "/etc/caddy/templates/global.caddyfile"},
-	}}, cfg.Targets)
-	require.Equal(t, "/etc/caddy/templates/global.caddyfile", cfg.Targets[0].GlobalTemplate())
-	require.Equal(t, []caddy.Target{
-		{Label: "caddy", Path: "/etc/caddy/Caddyfile"},
-		{Label: "edge", Path: "/var/caddy/Caddyfile"},
-	}, cfg.OSTargets)
+	require.Len(t, cfg.Targets, 1)
+	require.Equal(t, "external", cfg.Targets[0].Label)
+	inst, _ := cfg.Targets[0].Flag("instance")
+	require.Equal(t, "caddy-prod", inst)
+	proj, _ := cfg.Targets[0].Flag("project")
+	require.Equal(t, "default", proj)
+	tmpl, _ := cfg.Targets[0].Flag("global_template")
+	require.Equal(t, "/etc/caddy/templates/global.caddyfile", tmpl)
+
+	require.Len(t, cfg.OSTargets, 2)
+	require.Equal(t, "caddy", cfg.OSTargets[0].Label)
+	p0, _ := cfg.OSTargets[0].Flag("path")
+	require.Equal(t, "/etc/caddy/Caddyfile", p0)
+	require.Equal(t, "edge", cfg.OSTargets[1].Label)
+	p1, _ := cfg.OSTargets[1].Flag("path")
+	require.Equal(t, "/var/caddy/Caddyfile", p1)
 	require.Equal(t, "/etc/caddy/Caddyfile", cfg.CaddyfilePath)
 	require.Equal(t, "/etc/caddy/templates", cfg.TemplatesDir)
 	require.Equal(t, 500*time.Millisecond, cfg.DebounceWindow)
@@ -109,7 +114,7 @@ func TestRunNoCredentials(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
 		Targets: []caddy.Target{
-			{Label: "caddy", Project: "default", Instance: "caddy"},
+			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
 		},
 	}
 
@@ -121,7 +126,7 @@ func TestRunAssembleError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
 		Targets: []caddy.Target{
-			{Label: "caddy", Project: "default", Instance: "caddy"},
+			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
 		},
 		Exclude: []string{"caddy"},
 	}
@@ -137,7 +142,7 @@ func TestRunContextCanceled(t *testing.T) {
 
 	args := &mainActionArgs{
 		Targets: []caddy.Target{
-			{Label: "caddy", Project: "default", Instance: "caddy"},
+			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
 		},
 		IncusURL: "https://127.0.0.1:1",
 		Token:    "dummy-token",
@@ -160,11 +165,35 @@ func TestRunCommandValidationFailure(t *testing.T) {
 func TestMainAction(t *testing.T) {
 	args := &mainActionArgs{
 		Targets: []caddy.Target{
-			{Label: "caddy", Project: "default", Instance: "caddy"},
+			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
 		},
 		Log: "INFO",
 	}
 
 	err := mainAction(context.Background(), args)
 	require.ErrorIs(t, err, incustrust.ErrNoCredentials)
+}
+
+func TestRunCommandPluralEnvVars(t *testing.T) {
+	t.Setenv("INCUS_CADDY_PROJECTS", "p1,p2")
+	t.Setenv("INCUS_CADDY_INSTANCES", "edge,instance=caddy-1,project=default internal,instance=caddy-2,project=default")
+	t.Setenv("INCUS_CADDY_OS_PATHS", "path=/etc/caddy/Caddyfile,edge,path=/var/caddy/Caddyfile")
+	t.Setenv("INCUS_CADDY_EXCLUDES", "http,debounce")
+
+	cfg := newConfig()
+	cmd := runCommand(cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_ = cmd.Run(ctx, []string{"run"})
+
+	require.Equal(t, []string{"p1", "p2"}, cfg.Projects)
+	require.Len(t, cfg.Targets, 2)
+	require.Equal(t, "edge", cfg.Targets[0].Label)
+	require.Equal(t, "internal", cfg.Targets[1].Label)
+	require.Len(t, cfg.OSTargets, 2)
+	require.Equal(t, "caddy", cfg.OSTargets[0].Label)
+	require.Equal(t, "edge", cfg.OSTargets[1].Label)
+	require.Equal(t, []string{"http", "debounce"}, cfg.Exclude)
 }

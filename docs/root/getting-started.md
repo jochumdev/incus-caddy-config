@@ -72,7 +72,7 @@ services:
     environment:
       INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
       INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_INSTANCES: "edge:default:caddy"
+      INCUS_CADDY_INSTANCES: "edge,instance=caddy,project=default"
       INCUS_CADDY_HTTP_ADDRESS: ":9153"
       INCUS_CADDY_LOG: "INFO"
     secrets:
@@ -156,7 +156,7 @@ If you run Caddy directly on the host OS or inside a VM alongside `caddy-config`
 ```bash
 # Listen to Incus and update local Caddyfile directly
 caddy-config run \
-  --os-path edge:/etc/caddy/Caddyfile \
+  --os-path edge,path=/etc/caddy/Caddyfile \
   --remote default
 ```
 

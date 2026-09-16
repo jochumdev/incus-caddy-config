@@ -15,7 +15,7 @@ func TestChainAssemble(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
 		Targets: []caddy.Target{
-			{Label: "caddy", Project: "default", Instance: "caddy"},
+			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
 		},
 		HTTPAddr: ":9153",
 	}
@@ -73,7 +73,7 @@ func TestChainAssembleWithTrace(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
 		Targets: []caddy.Target{
-			{Label: "caddy", Project: "default", Instance: "caddy"},
+			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
 		},
 		HTTPAddr: ":9153",
 		Log:      "TRACE",

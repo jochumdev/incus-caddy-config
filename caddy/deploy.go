@@ -58,9 +58,12 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 		caddyfilePath = "/config/Caddyfile"
 	}
 
-	inst, _, err := conn.GetInstance(ctx, target.Project, target.Instance, nil)
+	project, _ := target.Flag("project")
+	instance, _ := target.Flag("instance")
+
+	inst, _, err := conn.GetInstance(ctx, project, instance, nil)
 	if err != nil {
-		return fmt.Errorf("getting instance %s:%s: %w", target.Project, target.Instance, err)
+		return fmt.Errorf("getting instance %s:%s: %w", project, instance, err)
 	}
 
 	devices := inst.ExpandedDevices
@@ -94,7 +97,7 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 			"target", sftpTargetPath,
 		)
 
-		sftpClient, err = conn.GetStoragePoolVolumeFileSFTP(ctx, target.Project, vol.pool, "custom", vol.name)
+		sftpClient, err = conn.GetStoragePoolVolumeFileSFTP(ctx, project, vol.pool, "custom", vol.name)
 		if err != nil {
 			return fmt.Errorf("opening SFTP session for volume %s/%s: %w", vol.pool, vol.name, err)
 		}
@@ -102,9 +105,9 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 		sftpTargetPath = caddyfilePath
 		sftpStagingPath = containerStagingPath
 
-		sftpClient, err = conn.GetInstanceFileSFTP(ctx, target.Project, target.Instance)
+		sftpClient, err = conn.GetInstanceFileSFTP(ctx, project, instance)
 		if err != nil {
-			return fmt.Errorf("opening SFTP session for %s:%s: %w", target.Project, target.Instance, err)
+			return fmt.Errorf("opening SFTP session for %s:%s: %w", project, instance, err)
 		}
 	}
 
@@ -139,14 +142,14 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 			Command: []string{"caddy", "validate", "--config", containerStagingPath, "--adapter", "caddyfile"},
 		}
 
-		updates, err := conn.ExecInstance(ctx, target.Project, target.Instance, validatePost, &iclient.InstanceExecArgs{
+		updates, err := conn.ExecInstance(ctx, project, instance, validatePost, &iclient.InstanceExecArgs{
 			Stdout: &validateStdout,
 			Stderr: &validateStderr,
 		})
 		if err != nil {
 			_ = sftpClient.Remove(sftpStagingPath)
 
-			return fmt.Errorf("executing caddy validate in %s:%s: %w", target.Project, target.Instance, err)
+			return fmt.Errorf("executing caddy validate in %s:%s: %w", project, instance, err)
 		}
 
 		op, err := iclient.WaitOperation(ctx, updates)
@@ -176,8 +179,8 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 	if !running {
 		logger.Info("Caddyfile deployed to volume for next boot (instance not running)",
 			"label", target.Label,
-			"project", target.Project,
-			"instance", target.Instance,
+			"project", project,
+			"instance", instance,
 		)
 
 		return nil
@@ -189,12 +192,12 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 		Command: []string{"caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile"},
 	}
 
-	reloadUpdates, err := conn.ExecInstance(ctx, target.Project, target.Instance, reloadPost, &iclient.InstanceExecArgs{
+	reloadUpdates, err := conn.ExecInstance(ctx, project, instance, reloadPost, &iclient.InstanceExecArgs{
 		Stdout: &reloadStdout,
 		Stderr: &reloadStderr,
 	})
 	if err != nil {
-		return fmt.Errorf("executing caddy reload in %s:%s: %w", target.Project, target.Instance, err)
+		return fmt.Errorf("executing caddy reload in %s:%s: %w", project, instance, err)
 	}
 
 	reloadOp, err := iclient.WaitOperation(ctx, reloadUpdates)
@@ -210,8 +213,8 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 
 	logger.Info("Caddyfile deployed and reloaded successfully",
 		"label", target.Label,
-		"project", target.Project,
-		"instance", target.Instance,
+		"project", project,
+		"instance", instance,
 	)
 
 	return nil

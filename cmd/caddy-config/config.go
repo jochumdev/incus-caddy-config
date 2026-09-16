@@ -100,6 +100,25 @@ func (c *config) validate() (*mainActionArgs, error) {
 		return nil, errors.New("at least one --caddy-instance or --os-path must be specified")
 	}
 
+	for _, t := range c.Targets {
+		instance, ok := t.Flag("instance")
+		if !ok || instance == "" {
+			return nil, fmt.Errorf("invalid --caddy-instance %q: missing required flag \"instance\"", t.String())
+		}
+
+		project, ok := t.Flag("project")
+		if !ok || project == "" {
+			return nil, fmt.Errorf("invalid --caddy-instance %q: missing required flag \"project\"", t.String())
+		}
+	}
+
+	for _, t := range c.OSTargets {
+		path, ok := t.Flag("path")
+		if !ok || path == "" {
+			return nil, fmt.Errorf("invalid --os-path %q: missing required flag \"path\"", t.String())
+		}
+	}
+
 	return &mainActionArgs{
 		IncusURL:       c.IncusURL,
 		Token:          c.Token,

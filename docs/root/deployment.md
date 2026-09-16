@@ -52,7 +52,7 @@ services:
     environment:
       INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
       INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_INSTANCES: "edge:default:caddy-1"
+      INCUS_CADDY_INSTANCES: "edge,instance=caddy-1,project=default"
       INCUS_CADDY_HTTP_ADDRESS: ":9153"
       INCUS_CADDY_LOG: "INFO"
     secrets:
@@ -109,7 +109,7 @@ By default, `caddy-config` monitors all visible Incus projects. You can restrict
 caddy-config run \
   --project prod \
   --project staging \
-  --caddy-instance edge:default:caddy
+  --caddy-instance edge,instance=caddy,project=default
 ```
 
 ### Multiple Caddy Servers
@@ -119,12 +119,12 @@ You can route different services to different Caddy instances using separate lab
 ```bash
 # Repeated flags
 caddy-config run \
-  --caddy-instance public:default:caddy-external \
-  --caddy-instance internal:default:caddy-internal
+  --caddy-instance public,instance=caddy-external,project=default \
+  --caddy-instance internal,instance=caddy-internal,project=default
 
 # Or comma-separated
 caddy-config run \
-  --caddy-instance "public:default:caddy-external,internal:default:caddy-internal"
+  --caddy-instance "public,instance=caddy-external,project=default,internal,instance=caddy-internal,project=default"
 ```
 
 - Instances tagged with `user.label.public.domain` route to `caddy-external`.
