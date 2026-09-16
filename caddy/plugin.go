@@ -22,7 +22,7 @@ type Config struct {
 	OSTargets          []OSTarget
 	CaddyfilePath      string
 	CustomTemplatesDir string
-	GlobalTemplate     string
+	GlobalTemplates    map[string]string
 	InboxSize          int
 }
 
@@ -238,7 +238,8 @@ func (p *Plugin) reconcile(ctx context.Context) {
 	for _, target := range p.cfg.Targets {
 		vhosts := extractVhosts(target.Label, instances)
 
-		content, err := render(vhosts, p.cfg.CustomTemplatesDir, p.cfg.GlobalTemplate)
+		globalTmpl := p.cfg.GlobalTemplates[target.Label]
+		content, err := render(vhosts, p.cfg.CustomTemplatesDir, globalTmpl)
 		if err != nil {
 			p.logger.Error("rendering Caddyfile", "label", target.Label, "err", err)
 
@@ -270,7 +271,8 @@ func (p *Plugin) reconcile(ctx context.Context) {
 	for _, target := range p.cfg.OSTargets {
 		vhosts := extractVhosts(target.Label, instances)
 
-		content, err := render(vhosts, p.cfg.CustomTemplatesDir, p.cfg.GlobalTemplate)
+		globalTmpl := p.cfg.GlobalTemplates[target.Label]
+		content, err := render(vhosts, p.cfg.CustomTemplatesDir, globalTmpl)
 		if err != nil {
 			p.logger.Error("rendering Caddyfile for OS target", "label", target.Label, "path", target.Path, "err", err)
 

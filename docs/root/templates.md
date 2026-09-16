@@ -45,35 +45,37 @@ By default, `caddy-config` prepends a minimal global options block to every rend
 
 You can overwrite this block to configure global settings such as TLS certificates, global logging, email, acme CA endpoints, or trusted proxies.
 
-### 1. Via CLI Flag or Environment Variable (`--global-template`)
+### Specifying a Global Template (`--global-template`)
 
-You can pass a custom template directly using `--global-template` (or `INCUS_CADDY_GLOBAL_TEMPLATE`):
+You specify a custom global template per target route label using `--global-template` (or `INCUS_CADDY_GLOBAL_TEMPLATE`). The flag takes the format `<label>:<path-or-template>` and can be repeated to configure each target label independently:
 
 **As a file path:**
 ```bash
 caddy-config run \
   --caddy-instance edge:default:caddy \
-  --global-template /etc/caddy/global.caddyfile
+  --global-template edge:/etc/caddy/global.caddyfile
+```
+
+**Targeted multi-instance configuration:**
+```bash
+caddy-config run \
+  --caddy-instance external:default:caddy-external \
+  --caddy-instance internal:default:caddy-internal \
+  --global-template external:/etc/caddy/external.global.caddyfile \
+  --global-template internal:/etc/caddy/internal.global.caddyfile
 ```
 
 **As an inline template string:**
 ```bash
 caddy-config run \
   --caddy-instance edge:default:caddy \
-  --global-template '{
+  --global-template 'edge:{
 	admin localhost:2019
 	email admin@example.com
 }'
 ```
 
-### 2. Auto-Discovery via External Template Directory (`--custom-templates-dir`)
-
-If `--custom-templates-dir` is configured (e.g. `--custom-templates-dir /etc/caddy/templates`), `caddy-config` automatically checks for a global template file matching one of:
-1. `global.caddyfile`
-2. `global.tmpl`
-3. `global`
-
-When present, `caddy-config` uses that file without requiring an explicit `--global-template` flag.
+Any deployment target whose label does not have an explicit `--global-template` specified uses the default minimal options block (`{ admin localhost:2019 }`).
 
 ### Global Template Context Variables
 

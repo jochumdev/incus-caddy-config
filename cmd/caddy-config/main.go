@@ -139,10 +139,10 @@ func runCommand(cfg *config) *cli.Command {
 				Destination: &cfg.CustomTemplatesDir,
 				Sources:     cli.EnvVars("INCUS_CADDY_CUSTOM_TEMPLATES_DIR"),
 			},
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:        "global-template",
-				Usage:       "Path to custom global Caddyfile template or inline template",
-				Destination: &cfg.GlobalTemplate,
+				Usage:       "Global Caddyfile template in format 'label:path-or-template'; can be repeated",
+				Destination: &cfg.GlobalTemplates,
 				Sources:     cli.EnvVars("INCUS_CADDY_GLOBAL_TEMPLATE"),
 			},
 			&cli.DurationFlag{
@@ -260,7 +260,7 @@ func mainAction(ctx context.Context, args *mainActionArgs) error {
 		"secrets_dir", args.SecretsDir,
 		"token", args.redactedToken(),
 		"custom_templates_dir", args.CustomTemplatesDir,
-		"global_template", args.GlobalTemplate,
+		"global_templates", args.GlobalTemplates,
 		"debounce_window", args.DebounceWindow,
 		"workers", args.Workers,
 		"read_timeout", args.ReadTimeout,

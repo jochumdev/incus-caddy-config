@@ -52,7 +52,7 @@ services:
     environment:
       INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
       INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_INSTANCES: "edge:default:caddy"
+      INCUS_CADDY_INSTANCES: "edge:default:caddy-1"
       INCUS_CADDY_HTTP_ADDRESS: ":9153"
       INCUS_CADDY_LOG: "INFO"
     secrets:
@@ -86,12 +86,14 @@ volumes:
 ### Container Restarts & Host Reboots
 
 Because `/config` is backed by a custom storage volume:
+
 - When the Caddy container restarts (`incus-compose restart caddy`) or the Incus host reboots, Caddy immediately starts up using the persisted `Caddyfile` on the volume.
 - Traffic continues to be served immediately on boot without waiting for `caddy-config` to initialize.
 
 ### Offline / Cold Reconciliations
 
 If Caddy is temporarily stopped (e.g. during maintenance or image upgrades):
+
 1. `caddy-config` detects the container is stopped.
 2. It resolves the storage volume mounted at `/config` and writes the updated `Caddyfile` directly to the volume via SFTP.
 3. Because Caddy is not running, in-container validation and reload are skipped.
@@ -144,6 +146,7 @@ incus-compose logs -f caddy-config
 ```
 
 `DEBUG` logs display:
+
 - Incoming Incus events and actions (`instance-started`, `instance-stopped`, `instance-renamed`).
 - Discovered network interfaces and resolved IPv4 addresses.
 - In-container `caddy validate` exit codes and output.

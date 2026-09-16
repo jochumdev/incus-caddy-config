@@ -80,6 +80,49 @@ func TestParseOSTarget(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseGlobalTemplate(t *testing.T) {
+	// Explicit prefix with file path.
+	gt, err := ParseGlobalTemplate("caddy-external:/etc/caddy/external.caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, GlobalTemplate{Label: "caddy-external", Template: "/etc/caddy/external.caddyfile"}, gt)
+
+	// Explicit prefix with inline template.
+	gt, err = ParseGlobalTemplate("internal:{\n\tadmin localhost:2019\n}")
+	require.NoError(t, err)
+	require.Equal(t, GlobalTemplate{Label: "internal", Template: "{\n\tadmin localhost:2019\n}"}, gt)
+
+	// Explicit prefix with Windows drive letter path.
+	gt, err = ParseGlobalTemplate(`edge:C:\caddy\global.caddyfile`)
+	require.NoError(t, err)
+	require.Equal(t, GlobalTemplate{Label: "edge", Template: `C:\caddy\global.caddyfile`}, gt)
+
+	// Bare path without prefix must fail.
+	_, err = ParseGlobalTemplate("/etc/caddy/global.caddyfile")
+	require.Error(t, err)
+
+	// Bare inline template containing ':' without prefix must fail.
+	_, err = ParseGlobalTemplate("{\n\tadmin localhost:2019\n}")
+	require.Error(t, err)
+
+	// Windows drive letter without label prefix must fail.
+	_, err = ParseGlobalTemplate(`C:\caddy\global.caddyfile`)
+	require.Error(t, err)
+
+	// Empty string.
+	_, err = ParseGlobalTemplate("")
+	require.Error(t, err)
+
+	_, err = ParseGlobalTemplate("   ")
+	require.Error(t, err)
+
+	// Empty template with prefix.
+	_, err = ParseGlobalTemplate("edge:")
+	require.Error(t, err)
+
+	_, err = ParseGlobalTemplate(":")
+	require.Error(t, err)
+}
+
 func TestExtractVhosts(t *testing.T) {
 	ifaces1 := []iutil.InstanceInterface{
 		iutil.NewInstanceInterface("default", "incusbr0", true, []string{"10.0.1.5"}, nil),

@@ -37,7 +37,7 @@ Every flag maps to exactly **one canonical environment variable** prefixed with 
 | `--os-path` | `INCUS_CADDY_OS_PATH` | | Target local Caddyfile in `[label:]path` format (repeatable). Defaults label to `caddy`. |
 | `--caddyfile-path` | `INCUS_CADDY_CADDYFILE_PATH` | `/config/Caddyfile` | Path to the active Caddyfile inside the Caddy container. |
 | `--custom-templates-dir` | `INCUS_CADDY_CUSTOM_TEMPLATES_DIR` | | Local path to directory containing custom vhost templates. |
-| `--global-template` | `INCUS_CADDY_GLOBAL_TEMPLATE` | | Path to custom global Caddyfile template or inline template. |
+| `--global-template` | `INCUS_CADDY_GLOBAL_TEMPLATE` | | Path to custom global Caddyfile template or inline template in `label:path-or-template` format (repeatable). |
 | `--debounce-window` | `INCUS_CADDY_DEBOUNCE_WINDOW` | `250ms` | Quiet period before flushing burst events to avoid redundant reloads. |
 | `--http-address` | `INCUS_CADDY_HTTP_ADDRESS` | `:9153` | Listening address for `/health` and `/ready` endpoints. Empty disables HTTP server. |
 | `--exclude` | `INCUS_CADDY_EXCLUDE` | | Optional chain stage to exclude (e.g. `http` or `debounce`). Repeatable. |

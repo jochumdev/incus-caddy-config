@@ -62,7 +62,7 @@ services:
       sh -c 'if [ ! -f /config/Caddyfile ]; then echo -e "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile; fi; exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
   caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.2
+    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
     restart: unless-stopped
     depends_on:
       caddy:

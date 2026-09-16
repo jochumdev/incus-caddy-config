@@ -79,7 +79,7 @@ flowchart TD
 - **Single Goroutine Concurrency**: Concurrency model strictly confined to a single goroutine (Rule A4). Zero mutexes, race-free event processing, and orderly reconciliation.
 - **Warm Gating**: Reconciliations are suppressed while the event chain is cold (`ChainCold`). Deployments only trigger after the initial fleet sweep completes (`ChainWarm`), eliminating route churn during daemon reconnects.
 - **Automatic Load Balancing**: Multiple instances sharing the same domain label are automatically aggregated and sorted into a single load-balanced `reverse_proxy` directive.
-- **Custom Vhost & Global Templating**: Supports custom site blocks and overriding the global options block via inline Go templates, file paths, or external template directories (`--global-template`, `--custom-templates-dir`).
+- **Custom Vhost & Global Templating**: Supports custom site blocks via external template directories (`--custom-templates-dir`) and overriding the global options block per target label via inline Go templates or file paths (`--global-template`).
 - **Observability**: Built-in HTTP endpoints on `:9153` for liveness (`/health`), fleet readiness (`/ready`), and Go runtime profiling (`/debug/pprof`).
 
 ---
@@ -117,7 +117,7 @@ services:
       sh -c 'if [ ! -f /config/Caddyfile ]; then echo -e "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile; fi; exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
   caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.2
+    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
     restart: unless-stopped
     depends_on:
       caddy:
@@ -127,7 +127,7 @@ services:
     environment:
       INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
       INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_INSTANCES: "edge:default:caddy"
+      INCUS_CADDY_INSTANCES: "edge:default:caddy-1"
       INCUS_CADDY_HTTP_ADDRESS: ":9153"
       INCUS_CADDY_LOG: "INFO"
     secrets:

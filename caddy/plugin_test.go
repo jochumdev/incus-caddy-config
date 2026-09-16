@@ -366,3 +366,54 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	_, err = os.Stat(brokenPath)
 	require.True(t, os.IsNotExist(err))
 }
+
+func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+
+	execCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "sh", "-c", "exit 0")
+	}
+
+	tmpDir := t.TempDir()
+	pathExt := filepath.Join(tmpDir, "external.Caddyfile")
+	pathInt := filepath.Join(tmpDir, "internal.Caddyfile")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	p := New(logger, Config{
+		OSTargets: []OSTarget{
+			{Label: "caddy-external", Path: pathExt},
+			{Label: "caddy-internal", Path: pathInt},
+		},
+		GlobalTemplates: map[string]string{
+			"caddy-external": "{\n\tadmin localhost:2019\n\t# external-global-header\n}",
+			"caddy-internal": "{\n\tadmin localhost:2019\n\t# internal-global-header\n}",
+		},
+	})
+
+	now := time.Now()
+	instExt := iutil.NewInstance(true, map[string]string{
+		"user.label.caddy-external.domain": "ext.example.com",
+	}, nil, nil)
+	instInt := iutil.NewInstance(true, map[string]string{
+		"user.label.caddy-internal.domain": "int.example.com",
+	}, nil, nil)
+
+	p.instances["default/ext"] = iutil.NewEvent(now, "instance-started", "default", "ext", "").WithInstance(instExt, true)
+	p.instances["default/int"] = iutil.NewEvent(now, "instance-started", "default", "int", "").WithInstance(instInt, true)
+
+	ctx := context.Background()
+	p.reconcile(ctx)
+
+	dataExt, err := os.ReadFile(pathExt)
+	require.NoError(t, err)
+	require.Contains(t, string(dataExt), "# external-global-header")
+	require.NotContains(t, string(dataExt), "# internal-global-header")
+	require.Contains(t, string(dataExt), "ext.example.com")
+
+	dataInt, err := os.ReadFile(pathInt)
+	require.NoError(t, err)
+	require.Contains(t, string(dataInt), "# internal-global-header")
+	require.NotContains(t, string(dataInt), "# external-global-header")
+	require.Contains(t, string(dataInt), "int.example.com")
+}

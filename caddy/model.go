@@ -66,6 +66,44 @@ func ParseOSTarget(s string) (OSTarget, error) {
 	return OSTarget{Label: label, Path: path}, nil
 }
 
+// GlobalTemplate represents a global options block template bound to a target label.
+type GlobalTemplate struct {
+	Label    string
+	Template string
+}
+
+// ParseGlobalTemplate parses a "label:template" specification.
+func ParseGlobalTemplate(s string) (GlobalTemplate, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return GlobalTemplate{}, fmt.Errorf("empty global template")
+	}
+
+	idx := strings.Index(s, ":")
+	if idx == -1 {
+		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
+	}
+
+	// Reject bare Windows drive letter without label (e.g. C:\... or C:/...)
+	if idx == 1 && len(s) > 2 && (s[2] == '\\' || s[2] == '/') && ((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z')) {
+		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
+	}
+
+	// Reject inline template block without label prefix
+	braceIdx := strings.Index(s, "{")
+	if braceIdx != -1 && braceIdx < idx {
+		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
+	}
+
+	label := strings.TrimSpace(s[:idx])
+	tmpl := strings.TrimSpace(s[idx+1:])
+	if label == "" || tmpl == "" {
+		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
+	}
+
+	return GlobalTemplate{Label: label, Template: tmpl}, nil
+}
+
 // vhost holds the model data needed to render a Caddyfile site block.
 type vhost struct {
 	Domain    string

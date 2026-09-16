@@ -34,9 +34,14 @@ func render(vhosts []vhost, customTemplatesDir, globalTemplate string) ([]byte, 
 		return nil, fmt.Errorf("parsing default global template: %w", err)
 	}
 
-	globalTmpl, err := resolveGlobalTemplate(globalTemplate, customTemplatesDir, defaultGlobalTmpl)
-	if err != nil {
-		return nil, fmt.Errorf("resolving global template: %w", err)
+	globalTmpl := defaultGlobalTmpl
+	if globalTemplate != "" {
+		tmpl, err := loadGlobalTemplate(globalTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("loading global template: %w", err)
+		}
+
+		globalTmpl = tmpl
 	}
 
 	var globalBuf bytes.Buffer
@@ -84,52 +89,28 @@ func render(vhosts []vhost, customTemplatesDir, globalTemplate string) ([]byte, 
 	return buf.Bytes(), nil
 }
 
-// resolveGlobalTemplate returns the template to use for the global Caddyfile header.
-func resolveGlobalTemplate(globalTemplate, customTemplatesDir string, defaultGlobalTmpl *template.Template) (*template.Template, error) {
-	if globalTemplate != "" {
-		content, err := os.ReadFile(globalTemplate)
-		if err == nil {
-			tmpl, err := template.New(filepath.Base(globalTemplate)).Parse(string(content))
-			if err != nil {
-				return nil, fmt.Errorf("parsing global template file %q: %w", globalTemplate, err)
-			}
-
-			return tmpl, nil
-		}
-
-		if !os.IsNotExist(err) || (!strings.Contains(globalTemplate, "\n") && !strings.Contains(globalTemplate, "{") && (filepath.IsAbs(globalTemplate) || strings.HasPrefix(globalTemplate, "."))) {
-			return nil, fmt.Errorf("reading global template file %q: %w", globalTemplate, err)
-		}
-
-		tmpl, err := template.New("inline_global").Parse(globalTemplate)
+// loadGlobalTemplate loads a custom global template from a file or inline string.
+func loadGlobalTemplate(globalTemplate string) (*template.Template, error) {
+	content, err := os.ReadFile(globalTemplate)
+	if err == nil {
+		tmpl, err := template.New(filepath.Base(globalTemplate)).Parse(string(content))
 		if err != nil {
-			return nil, fmt.Errorf("parsing inline global template: %w", err)
+			return nil, fmt.Errorf("parsing global template file %q: %w", globalTemplate, err)
 		}
 
 		return tmpl, nil
 	}
 
-	if customTemplatesDir != "" {
-		candidates := []string{
-			filepath.Join(customTemplatesDir, "global"),
-			filepath.Join(customTemplatesDir, "global.tmpl"),
-			filepath.Join(customTemplatesDir, "global.caddyfile"),
-		}
-
-		for _, path := range candidates {
-			content, err := os.ReadFile(path)
-			if err == nil {
-				tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
-				if err != nil {
-					return nil, fmt.Errorf("parsing global template file %q: %w", path, err)
-				}
-
-				return tmpl, nil
-			}
-		}
+	if !os.IsNotExist(err) || (!strings.Contains(globalTemplate, "\n") && !strings.Contains(globalTemplate, "{") && (filepath.IsAbs(globalTemplate) || strings.HasPrefix(globalTemplate, "."))) {
+		return nil, fmt.Errorf("reading global template file %q: %w", globalTemplate, err)
 	}
 
-	return defaultGlobalTmpl, nil
+	tmpl, err := template.New("inline_global").Parse(globalTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parsing inline global template: %w", err)
+	}
+
+	return tmpl, nil
 }
 
 // resolveTemplate returns the template to use for a vhost.

@@ -38,7 +38,7 @@ type config struct {
 
 	CaddyfilePath      string
 	CustomTemplatesDir string
-	GlobalTemplate     string
+	GlobalTemplates    []string
 
 	DebounceWindow time.Duration
 	HTTPAddr       string
@@ -69,7 +69,7 @@ type mainActionArgs struct {
 
 	CaddyfilePath      string
 	CustomTemplatesDir string
-	GlobalTemplate     string
+	GlobalTemplates    map[string]string
 
 	DebounceWindow time.Duration
 	HTTPAddr       string
@@ -122,6 +122,16 @@ func (c *config) validate() (*mainActionArgs, error) {
 		osTargets = append(osTargets, target)
 	}
 
+	globalTemplates := make(map[string]string)
+	for _, entry := range c.GlobalTemplates {
+		gt, err := caddy.ParseGlobalTemplate(entry)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --global-template %q: %w", entry, err)
+		}
+
+		globalTemplates[gt.Label] = gt.Template
+	}
+
 	return &mainActionArgs{
 		IncusURL:           c.IncusURL,
 		Token:              c.Token,
@@ -137,7 +147,7 @@ func (c *config) validate() (*mainActionArgs, error) {
 		OSTargets:          osTargets,
 		CaddyfilePath:      c.CaddyfilePath,
 		CustomTemplatesDir: c.CustomTemplatesDir,
-		GlobalTemplate:     c.GlobalTemplate,
+		GlobalTemplates:    globalTemplates,
 		DebounceWindow:     c.DebounceWindow,
 		HTTPAddr:           c.HTTPAddr,
 		Exclude:            c.Exclude,

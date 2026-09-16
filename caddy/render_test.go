@@ -215,59 +215,6 @@ func TestRendererCustomGlobalTemplateFile(t *testing.T) {
 	require.Contains(t, out, "app.example.com {")
 }
 
-func TestRendererCustomGlobalTemplateInCustomTemplatesDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	globalFile := filepath.Join(tmpDir, "global.caddyfile")
-	err := os.WriteFile(globalFile, []byte(`{
-	admin localhost:2019
-	servers {
-		trusted_proxies static 10.0.0.0/8
-	}
-}`), 0600)
-	require.NoError(t, err)
-
-	vhosts := []vhost{
-		{
-			Domain:    "app.example.com",
-			Upstreams: []string{"10.0.1.5:8080"},
-		},
-	}
-
-	// globalTemplate is empty, should auto-discover global.caddyfile in customTemplatesDir
-	content, err := render(vhosts, tmpDir, "")
-	require.NoError(t, err)
-
-	out := string(content)
-	require.Contains(t, out, "trusted_proxies static 10.0.0.0/8")
-	require.Contains(t, out, "app.example.com {")
-}
-
-func TestRendererCustomGlobalTemplateInCustomTemplatesDirTmpl(t *testing.T) {
-	tmpDir := t.TempDir()
-	globalFile := filepath.Join(tmpDir, "global.tmpl")
-	err := os.WriteFile(globalFile, []byte(`{
-	admin localhost:2019
-	log {
-		level DEBUG
-	}
-}`), 0600)
-	require.NoError(t, err)
-
-	vhosts := []vhost{
-		{
-			Domain:    "app.example.com",
-			Upstreams: []string{"10.0.1.5:8080"},
-		},
-	}
-
-	content, err := render(vhosts, tmpDir, "")
-	require.NoError(t, err)
-
-	out := string(content)
-	require.Contains(t, out, "level DEBUG")
-	require.Contains(t, out, "app.example.com {")
-}
-
 func TestRendererGlobalTemplateWithVhostsContext(t *testing.T) {
 	globalTmpl := `{
 	admin localhost:2019
@@ -290,7 +237,7 @@ func TestRendererInvalidGlobalTemplate(t *testing.T) {
 
 	_, err := render(vhosts, "", "{{ unclosed")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "resolving global template")
+	require.Contains(t, err.Error(), "loading global template")
 }
 
 func TestRendererMissingGlobalTemplateFile(t *testing.T) {
@@ -299,17 +246,4 @@ func TestRendererMissingGlobalTemplateFile(t *testing.T) {
 	_, err := render(vhosts, "", "/nonexistent/global.caddyfile")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "reading global template file")
-}
-
-func TestRendererInvalidGlobalTemplateInCustomTemplatesDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	globalFile := filepath.Join(tmpDir, "global.tmpl")
-	err := os.WriteFile(globalFile, []byte(`{{ unclosed`), 0600)
-	require.NoError(t, err)
-
-	vhosts := []vhost{{Domain: "app.example.com"}}
-
-	_, err = render(vhosts, tmpDir, "")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "parsing global template file")
 }
