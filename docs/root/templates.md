@@ -47,19 +47,22 @@ You can overwrite this block to configure global settings such as TLS certificat
 
 ### Specifying a Global Template (`global_template`)
 
-You specify a custom global template directly on each target using the `global_template=<path>` option within `--caddy-instance` or `--os-path`:
+You specify a custom global template directly on each target using the `global_template=<path>` option within `--caddy-instance` or `--os-path`.
 
-**As a file path:**
+Relative paths and template names are resolved against `--templates-dir` (or the `INCUS_CADDY_TEMPLATES_DIR` environment variable) if specified, with optional `.caddyfile` or `.tmpl` extensions. Absolute paths are also supported directly.
+
+**As a template name in `--templates-dir`:**
+```bash
+caddy-config run \
+  --templates-dir /etc/caddy/templates \
+  --caddy-instance external,instance=caddy-external,project=default,global_template=external.caddyfile \
+  --caddy-instance internal,instance=caddy-internal,project=default,global_template=internal.caddyfile
+```
+
+**As an absolute file path:**
 ```bash
 caddy-config run \
   --caddy-instance edge,instance=caddy,project=default,global_template=/etc/caddy/global.caddyfile
-```
-
-**Targeted multi-instance configuration:**
-```bash
-caddy-config run \
-  --caddy-instance external,instance=caddy-external,project=default,global_template=/etc/caddy/external.global.caddyfile \
-  --caddy-instance internal,instance=caddy-internal,project=default,global_template=/etc/caddy/internal.global.caddyfile
 ```
 
 **Co-located OS deployment:**
@@ -131,10 +134,9 @@ services:
 
 For reusable site configurations, store templates in a directory mounted to `caddy-config` and pass `--templates-dir /etc/caddy/templates`.
 
-When an instance specifies `edge.template: "spa_site"`, `caddy-config` searches the custom templates directory in the following order:
-1. `/etc/caddy/templates/spa_site`
-2. `/etc/caddy/templates/spa_site.tmpl`
-3. `/etc/caddy/templates/spa_site.caddyfile`
+When an instance specifies a valid path with an extension (dir+file+ext, e.g. `edge.template: "spa_site.caddyfile"` or `edge.template: "spa_site.tmpl"`), `caddy-config` resolves it against `--templates-dir` (or uses an absolute path if provided). If the file does not exist, it fails with a 404/not-found error.
+
+Any template input without a file extension is evaluated as an inline Go template.
 
 ---
 
@@ -166,7 +168,7 @@ services:
     labels:
       edge.domain: "secure.example.com"
       edge.upstream: "3000"
-      edge.template: "secure_proxy"
+      edge.template: "secure_proxy.caddyfile"
 ```
 
 ---
@@ -212,7 +214,7 @@ services:
     labels:
       edge.domain: "blog.example.com"
       edge.upstream: "9000"
-      edge.template: "php_site"
+      edge.template: "php_site.caddyfile"
 ```
 
 ---

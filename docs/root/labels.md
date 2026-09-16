@@ -69,7 +69,7 @@ For a target bound to prefix `edge`:
 | `user.label.edge.network` | Incus network interface name to resolve IPv4 from. Defaults to the first valid non-loopback IPv4 address. | `incusbr0`, `eth0`, or `internal` |
 | `user.label.edge.redirect` | Target URL for permanent redirects (renders `redir <url> permanent`). Defaults to appending `{uri}` unless `,no-uri` is specified. | `https://example.com` or `https://example.com,no-uri` |
 | `user.label.edge.redirs` | Plain redirection domain(s) mapping to primary domain. Options: `,uri` (default) or `,no-uri`. | `www.example.com,no-uri old.example.com,uri` |
-| `user.label.edge.template` | Custom vhost template name in `--templates-dir` or an inline Go template. | `php_site` or inline site block |
+| `user.label.edge.template` | Custom vhost template file in `--templates-dir` (must include extension) or an inline Go template. | `php_site.caddyfile` or inline site block |
 | `user.label.edge.service` | Custom service name override (defaults to `user.incus-compose.service`). Groups instance replicas together. | `payments-api` |
 
 ---

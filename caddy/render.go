@@ -36,7 +36,7 @@ func render(vhosts []vhost, templatesDir, globalTemplate string) ([]byte, error)
 
 	globalTmpl := defaultGlobalTmpl
 	if globalTemplate != "" {
-		tmpl, err := loadGlobalTemplate(globalTemplate)
+		tmpl, err := loadGlobalTemplate(templatesDir, globalTemplate)
 		if err != nil {
 			return nil, fmt.Errorf("loading global template: %w", err)
 		}
@@ -89,19 +89,60 @@ func render(vhosts []vhost, templatesDir, globalTemplate string) ([]byte, error)
 	return buf.Bytes(), nil
 }
 
-// loadGlobalTemplate loads a custom global template from a file.
-func loadGlobalTemplate(globalTemplateFile string) (*template.Template, error) {
-	content, err := os.ReadFile(globalTemplateFile)
-	if err != nil {
-		return nil, fmt.Errorf("reading global template file %q: %w", globalTemplateFile, err)
+// loadGlobalTemplate loads a custom global template from a file or templatesDir.
+func loadGlobalTemplate(templatesDir, globalTemplateFile string) (*template.Template, error) {
+	var candidates []string
+	if filepath.IsAbs(globalTemplateFile) {
+		candidates = []string{globalTemplateFile}
+		if filepath.Ext(globalTemplateFile) == "" {
+			candidates = append(candidates,
+				globalTemplateFile+".tmpl",
+				globalTemplateFile+".caddyfile",
+			)
+		}
+	} else {
+		if templatesDir != "" {
+			candidates = append(candidates, filepath.Join(templatesDir, globalTemplateFile))
+			if filepath.Ext(globalTemplateFile) == "" {
+				candidates = append(candidates,
+					filepath.Join(templatesDir, globalTemplateFile+".tmpl"),
+					filepath.Join(templatesDir, globalTemplateFile+".caddyfile"),
+				)
+			}
+		}
+		candidates = append(candidates, globalTemplateFile)
+		if filepath.Ext(globalTemplateFile) == "" {
+			candidates = append(candidates,
+				globalTemplateFile+".tmpl",
+				globalTemplateFile+".caddyfile",
+			)
+		}
 	}
 
-	tmpl, err := template.New(filepath.Base(globalTemplateFile)).Parse(string(content))
-	if err != nil {
-		return nil, fmt.Errorf("parsing global template file %q: %w", globalTemplateFile, err)
+	var readErr error
+	for _, path := range candidates {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			if readErr == nil {
+				readErr = err
+			}
+
+			continue
+		}
+
+		tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
+		if err != nil {
+			return nil, fmt.Errorf("parsing global template file %q: %w", path, err)
+		}
+
+		return tmpl, nil
 	}
 
-	return tmpl, nil
+	if readErr != nil {
+		return nil, fmt.Errorf("reading global template file %q: %w", globalTemplateFile, readErr)
+	}
+
+	return nil, fmt.Errorf("reading global template file %q: %w", globalTemplateFile, os.ErrNotExist)
 }
 
 // resolveTemplate returns the template to use for a vhost.
@@ -110,23 +151,45 @@ func resolveTemplate(v vhost, templatesDir string, defaultTmpl *template.Templat
 		return defaultTmpl, nil
 	}
 
-	// 1. Check if it matches a template file in templatesDir.
-	if templatesDir != "" {
-		candidates := []string{
-			filepath.Join(templatesDir, v.Template),
-			filepath.Join(templatesDir, v.Template+".tmpl"),
-			filepath.Join(templatesDir, v.Template+".caddyfile"),
+	// If the input is a valid path (dir+file+ext) use it or 404, else its an inline template.
+	if !strings.ContainsAny(v.Template, "{\n") && filepath.Ext(v.Template) != "" {
+		var candidates []string
+		if filepath.IsAbs(v.Template) {
+			candidates = []string{v.Template}
+		} else {
+			if templatesDir != "" {
+				candidates = append(candidates, filepath.Join(templatesDir, v.Template))
+			}
+			candidates = append(candidates, v.Template)
 		}
 
+		var readErr error
 		for _, path := range candidates {
 			content, err := os.ReadFile(path)
-			if err == nil {
-				return template.New(filepath.Base(path)).Parse(string(content))
+			if err != nil {
+				if readErr == nil {
+					readErr = err
+				}
+
+				continue
 			}
+
+			tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
+			if err != nil {
+				return nil, fmt.Errorf("parsing template file %q: %w", path, err)
+			}
+
+			return tmpl, nil
 		}
+
+		if readErr != nil {
+			return nil, fmt.Errorf("reading template file %q: %w", v.Template, readErr)
+		}
+
+		return nil, fmt.Errorf("reading template file %q: %w", v.Template, os.ErrNotExist)
 	}
 
-	// 2. Treat as an inline Go template string.
+	// Else its an inline template.
 	tmpl, err := template.New("inline_" + v.Domain).Parse(v.Template)
 	if err != nil {
 		return nil, fmt.Errorf("parsing inline template: %w", err)

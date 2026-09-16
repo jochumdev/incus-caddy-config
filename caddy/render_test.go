@@ -66,7 +66,7 @@ func TestRendererCustomTemplateFile(t *testing.T) {
 	vhosts := []vhost{
 		{
 			Domain:   "static.example.com",
-			Template: "static_proxy",
+			Template: "static_proxy.tmpl",
 		},
 	}
 
@@ -100,7 +100,7 @@ func TestRendererInvalidTemplateFile(t *testing.T) {
 	vhosts := []vhost{
 		{
 			Domain:   "broken.example.com",
-			Template: "broken",
+			Template: "broken.tmpl",
 		},
 	}
 
@@ -140,25 +140,17 @@ func TestRendererWhitespaceOnlyTemplate(t *testing.T) {
 	require.NotContains(t, out, "empty.example.com")
 }
 
-func TestRendererTemplateExtensions(t *testing.T) {
+func TestRendererTemplateFilePathOr404(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// 1. .caddyfile extension
+	// 1. Valid path with extension found in templatesDir
 	err := os.WriteFile(filepath.Join(tmpDir, "proxy.caddyfile"), []byte(`{{ .Domain }} { caddyfile_ext }`), 0600)
-	require.NoError(t, err)
-
-	// 2. Exact match without extension
-	err = os.WriteFile(filepath.Join(tmpDir, "exact_match"), []byte(`{{ .Domain }} { exact_match }`), 0600)
 	require.NoError(t, err)
 
 	vhosts := []vhost{
 		{
 			Domain:   "ext.example.com",
-			Template: "proxy",
-		},
-		{
-			Domain:   "exact.example.com",
-			Template: "exact_match",
+			Template: "proxy.caddyfile",
 		},
 	}
 
@@ -167,7 +159,32 @@ func TestRendererTemplateExtensions(t *testing.T) {
 
 	out := string(content)
 	require.Contains(t, out, "ext.example.com { caddyfile_ext }")
-	require.Contains(t, out, "exact.example.com { exact_match }")
+
+	// 2. Valid path with extension not found -> 404 (error)
+	vhostsMissing := []vhost{
+		{
+			Domain:   "missing.example.com",
+			Template: "missing.caddyfile",
+		},
+	}
+	_, err = render(vhostsMissing, tmpDir, "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reading template file")
+
+	// 3. Absolute path with extension
+	absFile := filepath.Join(tmpDir, "abs.tmpl")
+	err = os.WriteFile(absFile, []byte(`{{ .Domain }} { abs_tmpl }`), 0600)
+	require.NoError(t, err)
+
+	vhostsAbs := []vhost{
+		{
+			Domain:   "abs.example.com",
+			Template: absFile,
+		},
+	}
+	content, err = render(vhostsAbs, "", "")
+	require.NoError(t, err)
+	require.Contains(t, string(content), "abs.example.com { abs_tmpl }")
 }
 
 func TestRendererGlobalTemplateWithVhostsContext(t *testing.T) {
@@ -243,4 +260,31 @@ func TestRendererCustomTemplateWithFlags(t *testing.T) {
 	require.Contains(t, out, "tls internal")
 	require.Contains(t, out, `header Strict-Transport-Security "max-age=31536000"`)
 	require.Contains(t, out, "reverse_proxy 10.0.1.10:8443")
+}
+
+func TestRendererGlobalTemplateInTemplatesDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(tmpDir, "external.caddyfile"), []byte("{\n\tadmin localhost:2019\n\t# external-global\n}"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(tmpDir, "internal.tmpl"), []byte("{\n\tadmin localhost:2019\n\t# internal-global\n}"), 0600)
+	require.NoError(t, err)
+
+	vhosts := []vhost{{Domain: "app.example.com", Upstreams: []string{"10.0.1.1:80"}}}
+
+	// Exact file name
+	content, err := render(vhosts, tmpDir, "external.caddyfile")
+	require.NoError(t, err)
+	require.Contains(t, string(content), "# external-global")
+
+	// Resolving .caddyfile extension
+	content, err = render(vhosts, tmpDir, "external")
+	require.NoError(t, err)
+	require.Contains(t, string(content), "# external-global")
+
+	// Resolving .tmpl extension
+	content, err = render(vhosts, tmpDir, "internal")
+	require.NoError(t, err)
+	require.Contains(t, string(content), "# internal-global")
 }
