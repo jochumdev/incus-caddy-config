@@ -150,6 +150,8 @@ rules do not apply here. Follow this repo's own rules in
 - Before changing behaviour that contradicts the upstream docs, check them
   (`~/vendor/go/incus/doc/`). If we deviate anyway, record why in the code - the
   next reader will otherwise "fix" it back.
+- `docs/` is part of this repository, not a submodule; documentation changes are
+  tracked and committed directly here.
 
 ## Navigation
 

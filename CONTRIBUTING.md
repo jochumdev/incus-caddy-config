@@ -45,7 +45,7 @@ Its core design principles are documented in
 [docs/root/developer/index.md](docs/root/developer/index.md).
 
 Read the documentation in your own checkout, not the published site: `docs/` is
-a submodule, and a feature branch may carry a version of it that the site does
+part of the repository, and a feature branch may carry a version of it that the site does
 not have yet.
 
 Before contributing, you **must** read and understand this document. It defines
