@@ -57,7 +57,7 @@ func TestPluginProcessEvent(t *testing.T) {
 
 	// Unrelated instance without matching labels is ignored.
 	unrelatedInst := iutil.NewInstance(true, map[string]string{
-		"user.label.other.domain": "example.org",
+		"user.label.other": "example.org",
 	}, nil, nil)
 	unrelatedEv := iutil.NewEvent(now, "instance-started", "default", "db-1", "").WithInstance(unrelatedInst, true)
 	ctx := context.Background()
@@ -66,7 +66,7 @@ func TestPluginProcessEvent(t *testing.T) {
 
 	// Matching instance is tracked.
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain": "example.com",
+		"user.label.caddy": "example.com",
 	}, nil, nil)
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst, true)
 
@@ -117,7 +117,7 @@ func TestPluginRunCommandDrain(t *testing.T) {
 
 	now := time.Now()
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain": "drain.example.com",
+		"user.label.caddy": "drain.example.com",
 	}, nil, nil)
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-drain", "").WithInstance(inst, true)
 	p.Handle(ev)
@@ -218,7 +218,7 @@ func TestPluginProcessEventExtended(t *testing.T) {
 
 	// 1. Track an initial instance.
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain": "app.example.com",
+		"user.label.caddy": "app.example.com",
 	}, nil, nil)
 	evOld := iutil.NewEvent(now, "instance-started", "default", "app-v1", "").WithInstance(inst, true)
 	p.processEvent(ctx, evOld)
@@ -255,7 +255,7 @@ func TestPluginReconcileBranches(t *testing.T) {
 
 	now := time.Now()
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain": "reconcile.example.com",
+		"user.label.caddy": "reconcile.example.com",
 	}, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst, true)
 
@@ -274,7 +274,7 @@ func TestPluginReconcileBranches(t *testing.T) {
 		NewTarget("broken", map[string]string{"project": "default", "instance": "caddy-ext"}),
 	}
 	brokenInst := iutil.NewInstance(true, map[string]string{
-		"user.label.broken.domain": "broken.com,template={{ .Unclosed",
+		"user.label.broken": "broken.com,template={{ .Unclosed",
 	}, nil, nil)
 	p.instances["default/broken"] = iutil.NewEvent(now, "instance-started", "default", "broken", "").WithInstance(brokenInst, true)
 
@@ -300,9 +300,15 @@ func TestPluginHasTargetLabels(t *testing.T) {
 	require.False(t, p.hasTargetLabels(instOtherLabels))
 
 	instMatch := iutil.NewInstance(true, map[string]string{
-		"user.label.web.domain": "site.lan",
+		"user.label.web": "site.lan",
 	}, nil, nil)
 	require.True(t, p.hasTargetLabels(instMatch))
+
+	// Backward compatibility with prefixed labels.
+	instPrefixMatch := iutil.NewInstance(true, map[string]string{
+		"user.label.web.domain": "site.lan",
+	}, nil, nil)
+	require.True(t, p.hasTargetLabels(instPrefixMatch))
 
 	// Match via OSTargets.
 	pOS := New(nil, Config{
@@ -311,7 +317,7 @@ func TestPluginHasTargetLabels(t *testing.T) {
 		},
 	})
 	instOSMatch := iutil.NewInstance(true, map[string]string{
-		"user.label.local.domain": "local.lan",
+		"user.label.local": "local.lan",
 	}, nil, nil)
 	require.True(t, pOS.hasTargetLabels(instOSMatch))
 }
@@ -336,7 +342,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 
 	now := time.Now()
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain": "app.test",
+		"user.label.edge": "app.test",
 	}, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst, true)
 
@@ -360,7 +366,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 		},
 	})
 	badInst := iutil.NewInstance(true, map[string]string{
-		"user.label.bad.domain": "bad.test,template={{ .Unclosed",
+		"user.label.bad": "bad.test,template={{ .Unclosed",
 	}, nil, nil)
 	pBroken.instances["default/bad"] = iutil.NewEvent(now, "instance-started", "default", "bad", "").WithInstance(badInst, true)
 	pBroken.reconcile(ctx)
@@ -405,10 +411,10 @@ func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
 
 	now := time.Now()
 	instExt := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy-external.domain": "ext.example.com",
+		"user.label.caddy-external": "ext.example.com",
 	}, nil, nil)
 	instInt := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy-internal.domain": "int.example.com",
+		"user.label.caddy-internal": "int.example.com",
 	}, nil, nil)
 
 	p.instances["default/ext"] = iutil.NewEvent(now, "instance-started", "default", "ext", "").WithInstance(instExt, true)
@@ -478,7 +484,7 @@ func TestPluginReconcileCancelsPreviousDeployment(t *testing.T) {
 
 	now := time.Now()
 	inst1 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain": "v1.example.com",
+		"user.label.edge": "v1.example.com",
 	}, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst1, true)
 
@@ -491,7 +497,7 @@ func TestPluginReconcileCancelsPreviousDeployment(t *testing.T) {
 	require.NotNil(t, prevCancel)
 
 	inst2 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain": "v2.example.com",
+		"user.label.edge": "v2.example.com",
 	}, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-updated", "default", "app", "").WithInstance(inst2, true)
 

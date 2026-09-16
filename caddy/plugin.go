@@ -207,18 +207,20 @@ func (p *Plugin) hasTargetLabels(inst *iutil.Instance) bool {
 	}
 
 	for _, target := range p.cfg.Targets {
-		prefix := "user.label." + target.Label + "."
+		exact := "user.label." + target.Label
+		prefix := exact + "."
 		for k := range inst.Config() {
-			if strings.HasPrefix(k, prefix) {
+			if k == exact || strings.HasPrefix(k, prefix) {
 				return true
 			}
 		}
 	}
 
 	for _, target := range p.cfg.OSTargets {
-		prefix := "user.label." + target.Label + "."
+		exact := "user.label." + target.Label
+		prefix := exact + "."
 		for k := range inst.Config() {
-			if strings.HasPrefix(k, prefix) {
+			if k == exact || strings.HasPrefix(k, prefix) {
 				return true
 			}
 		}

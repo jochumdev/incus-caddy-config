@@ -99,7 +99,7 @@ Inside your custom template, the following fields are available:
 
 | Variable | Type | Description |
 |---|---|---|
-| `.Domain` | `string` | The domain(s) defined on the instance (`user.label.<prefix>.domain`). |
+| `.Domain` | `string` | The domain(s) defined on the instance (`user.label.<prefix>`). |
 | `.Service` | `string` | The service name if defined (`user.label.<prefix>.service` or `user.incus-compose.service`). |
 | `.Upstreams` | `[]string` | Sorted list of resolved upstream addresses (e.g. `["10.0.1.5:8080", "10.0.1.6:8080"]`). |
 | `.Redirect` | `string` | The redirect URL if configured via `redir=<url>` flag on domain. |
@@ -110,7 +110,7 @@ Inside your custom template, the following fields are available:
 
 ## Defining Custom Templates
 
-Custom templates are specified directly on the `domain` label using the `template=<value>` flag:
+Custom templates are specified directly on the target label using the `template=<value>` flag:
 
 ### 1. External Template Directory (`--templates-dir`)
 
@@ -123,8 +123,7 @@ services:
   web:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: "spa.example.com,template=spa_site.caddyfile"
-      edge.upstream: "8080"
+      edge: "spa.example.com,upstream=8080,template=spa_site.caddyfile"
 ```
 
 ### 2. Inline Go Template
@@ -136,12 +135,11 @@ services:
   web:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: |
-        spa.example.com,template={{ .Domain }} {
+      edge: |
+        spa.example.com,upstream=8080,template={{ .Domain }} {
         	encode gzip zstd
         	reverse_proxy {{ index .Upstreams 0 }}
         }
-      edge.upstream: "8080"
 ```
 
 ---
@@ -172,8 +170,7 @@ services:
   app:
     image: my-app:latest
     labels:
-      edge.domain: "secure.example.com,template=secure_proxy.caddyfile"
-      edge.upstream: "3000"
+      edge: "secure.example.com,upstream=3000,template=secure_proxy.caddyfile"
 ```
 
 ---
@@ -217,8 +214,7 @@ services:
   wordpress:
     image: docker.io/library/wordpress:fpm-alpine
     labels:
-      edge.domain: "blog.example.com,template=php_site.caddyfile"
-      edge.upstream: "9000"
+      edge: "blog.example.com,upstream=9000,template=php_site.caddyfile"
 ```
 
 ---

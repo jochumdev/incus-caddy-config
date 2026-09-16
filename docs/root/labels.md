@@ -53,8 +53,7 @@ When using **`incus-compose`**, the `user.label.` prefix is automatically added 
 
 | In `compose.yaml` | In Incus (`incus config show <instance>`) |
 |---|---|
-| `labels: edge.domain: "example.com"` | `user.label.edge.domain: "example.com"` |
-| `labels: edge.upstream: "8080"` | `user.label.edge.upstream: "8080"` |
+| `labels: edge: "example.com,upstream=8080"` | `user.label.edge: "example.com,upstream=8080"` |
 
 ---
 
@@ -64,9 +63,7 @@ For a target bound to prefix `edge`:
 
 | Label | Description | Example |
 |---|---|---|
-| `user.label.edge.domain` | **(Required)** Domain name(s) to match, with optional flags (e.g. `redir=<url>`, `template=<file>`, `resolvers='1.1.1.1 1.0.0.1'`). Multiple domains are separated by spaces. | `api.example.com` or `app.lan,template=spa.caddyfile` |
-| `user.label.edge.upstream` | Target port or `host:port` override. If omitted, routes to container IP on default HTTP port. | `8080`, `3000`, or `10.0.1.50:9090` |
-| `user.label.edge.network` | Incus network interface name to resolve IPv4 from. Defaults to the first valid non-loopback IPv4 address. | `incusbr0`, `eth0`, or `internal` |
+| `user.label.edge` | **(Required)** Domain name(s) to match, with optional flags (e.g. `upstream=8080`, `network=<iface>`, `redir=<url>`, `template=<file>`, `resolvers='1.1.1.1 1.0.0.1'`). Multiple domains are separated by spaces. | `api.example.com,upstream=8080` or `app.lan,network=eth0,template=spa.caddyfile` |
 | `user.label.edge.redirs` | Plain redirection domain(s) mapping to primary domain. Options: `,uri` (default), `,no-uri`, or `,template=<file>`. | `www.example.com,no-uri old.example.com,template=redir.caddyfile` |
 | `user.label.edge.service` | Custom service name override (defaults to `user.incus-compose.service`). Groups instance replicas together. | `payments-api` |
 
@@ -77,7 +74,7 @@ For a target bound to prefix `edge`:
 `caddy-config` resolves upstream container IP addresses dynamically:
 
 1. **Target Network Matching**:
-   If `user.label.<prefix>.network` is set (e.g. `internal`), `caddy-config` searches the instance's interfaces for one attached to `internal` and selects its first non-loopback IPv4 address.
+   If the `network` flag is set on the target label (e.g. `,network=internal` or `user.label.<prefix>.network`), `caddy-config` searches the instance's interfaces for one attached to `internal` and selects its first non-loopback IPv4 address.
 2. **First Available Non-Loopback IPv4**:
    If no network is specified (or the specified network is not attached), `caddy-config` selects the first non-loopback IPv4 address across all attached interfaces.
 3. **Loopback & Invalid Address Exclusion**:
@@ -96,8 +93,7 @@ services:
   web:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: "web.example.test"
-      edge.upstream: "8080"
+      edge: "web.example.test,upstream=8080"
 ```
 
 Rendered Caddyfile:
@@ -116,8 +112,7 @@ services:
   portal:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: "portal.example.com app.example.com"
-      edge.upstream: "80"
+      edge: "portal.example.com app.example.com,upstream=80"
 ```
 
 Rendered Caddyfile:
@@ -129,7 +124,7 @@ portal.example.com app.example.com {
 
 ### 3. Automatic Load Balancing (Multiple Replicas)
 
-When multiple instances define the same `edge.domain`, `caddy-config` merges their upstreams into a single sorted load-balanced `reverse_proxy` directive:
+When multiple instances define the same `edge` target label, `caddy-config` merges their upstreams into a single sorted load-balanced `reverse_proxy` directive:
 
 ```yaml
 services:
@@ -137,15 +132,13 @@ services:
     image: docker.io/library/busybox:latest
     command: httpd -f -p 8080
     labels:
-      edge.domain: "api.example.com"
-      edge.upstream: "8080"
+      edge: "api.example.com,upstream=8080"
 
   api2:
     image: docker.io/library/busybox:latest
     command: httpd -f -p 8080
     labels:
-      edge.domain: "api.example.com"
-      edge.upstream: "8080"
+      edge: "api.example.com,upstream=8080"
 ```
 
 Rendered Caddyfile:
@@ -167,7 +160,7 @@ services:
     image: docker.io/library/busybox:latest
     command: sh -c "sleep infinity"
     labels:
-      edge.domain: "old.example.com,redir=https://new.example.com{uri}"
+      edge: "old.example.com,redir=https://new.example.com{uri}"
 ```
 
 Rendered Caddyfile:
@@ -186,8 +179,7 @@ services:
   web:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: "example.com"
-      edge.upstream: "80"
+      edge: "example.com,upstream=80"
       edge.redirs: "www.example.com,uri old.example.com,no-uri"
 ```
 
@@ -213,15 +205,13 @@ Flag options per domain:
 
 ### 6. Multi-Network Instance (Specific Network)
 
-If an instance is connected to both a private management network (`mgmt`) and an internal service bridge (`appbr0`), explicitly pick the interface for reverse proxying:
+If an instance is connected to both a private management network (`mgmt`) and an internal service bridge (`appbr0`), explicitly pick the interface for reverse proxying via the `network` flag:
 
 ```yaml
 services:
   backend:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: "backend.internal"
-      edge.upstream: "8000"
-      edge.network: "appbr0"
+      edge: "backend.internal,upstream=8000,network=appbr0"
 ```
 

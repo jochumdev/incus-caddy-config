@@ -20,8 +20,7 @@ services:
     command: >
       sh -c "mkdir -p /www && echo 'api1-ok' > /www/index.html && exec httpd -f -v -p 8080 -h /www"
     labels:
-      edge.domain: "http://api.example.test"
-      edge.upstream: "8080"
+      edge: "http://api.example.test,upstream=8080"
 
   api2:
     image: docker.io/library/busybox:glibc
@@ -30,8 +29,7 @@ services:
     command: >
       sh -c "mkdir -p /www && echo 'api2-ok' > /www/index.html && exec httpd -f -v -p 8080 -h /www"
     labels:
-      edge.domain: "http://api.example.test"
-      edge.upstream: "8080"
+      edge: "http://api.example.test,upstream=8080"
 
 volumes:
   caddy-config:

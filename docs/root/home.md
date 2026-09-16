@@ -56,8 +56,7 @@ services:
     image: docker.io/library/busybox:latest
     command: httpd -f -p 8080
     labels:
-      edge.domain: "api.example.com"
-      edge.upstream: "8080"
+      edge: "api.example.com,upstream=8080"
 
 volumes:
   config:

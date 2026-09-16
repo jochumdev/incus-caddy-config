@@ -193,19 +193,17 @@ func TestExtractVhosts(t *testing.T) {
 		iutil.NewInstanceInterface("default", "incusbr0", true, []string{"10.0.1.5"}, nil),
 	}
 	inst1 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy1.domain":   "git.example.com",
-		"user.label.caddy1.upstream": "3000",
+		"user.label.caddy1": "git.example.com,upstream=3000",
 	}, ifaces1, nil)
 	now := time.Now()
 	ev1 := iutil.NewEvent(now, "instance-started", "default", "git-1", "").WithInstance(inst1, true)
 
-	// Replica 2 of git service
+	// Replica 2 of git service (using legacy .domain to verify backward compatibility)
 	ifaces2 := []iutil.InstanceInterface{
 		iutil.NewInstanceInterface("default", "incusbr0", true, []string{"10.0.1.6"}, nil),
 	}
 	inst2 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy1.domain":   "git.example.com",
-		"user.label.caddy1.upstream": "3000",
+		"user.label.caddy1.domain": "git.example.com,upstream=3000",
 	}, ifaces2, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "git-2", "").WithInstance(inst2, true)
 
@@ -214,7 +212,7 @@ func TestExtractVhosts(t *testing.T) {
 		iutil.NewInstanceInterface("default", "incusbr0", true, []string{"10.0.1.7"}, nil),
 	}
 	inst3 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy2.domain": "other.lan,redir=https://example.com",
+		"user.label.caddy2": "other.lan,redir=https://example.com",
 	}, ifaces3, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "other-1", "").WithInstance(inst3, true)
 
@@ -231,6 +229,35 @@ func TestExtractVhosts(t *testing.T) {
 	require.Len(t, vhosts2, 1)
 	require.Equal(t, "other.lan", vhosts2[0].Domain)
 	require.Equal(t, "https://example.com{uri}", vhosts2[0].Redirect)
+}
+
+func TestExtractVhostsWithNetworkFlag(t *testing.T) {
+	ifaces1 := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.10"}, nil),
+		iutil.NewInstanceInterface("default", "internal", true, []string{"192.168.10.20"}, nil),
+	}
+	inst1 := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service": "api",
+		"user.label.edge":            "api.example.com,upstream=8080,network=internal",
+	}, ifaces1, nil)
+	now := time.Now()
+	ev1 := iutil.NewEvent(now, "instance-started", "default", "api-1", "").WithInstance(inst1, true)
+
+	// Replica 2 shares service and inherits network flag
+	ifaces2 := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.11"}, nil),
+		iutil.NewInstanceInterface("default", "internal", true, []string{"192.168.10.21"}, nil),
+	}
+	inst2 := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service": "api",
+	}, ifaces2, nil)
+	ev2 := iutil.NewEvent(now, "instance-started", "default", "api-2", "").WithInstance(inst2, true)
+
+	vhosts := extractVhosts("edge", []*iutil.Event{ev1, ev2})
+	require.Len(t, vhosts, 1)
+	require.Equal(t, "api.example.com", vhosts[0].Domain)
+	require.Equal(t, []string{"192.168.10.20:8080", "192.168.10.21:8080"}, vhosts[0].Upstreams)
+	require.Equal(t, "internal", vhosts[0].Flags["network"])
 }
 
 func TestResolveIPv4WithNetwork(t *testing.T) {
@@ -286,18 +313,18 @@ func TestExtractVhostsEdgeCases(t *testing.T) {
 
 	// 2. Stopped instance.
 	instStopped := iutil.NewInstance(false, map[string]string{
-		"user.label.caddy.domain": "stopped.com",
+		"user.label.caddy": "stopped.com",
 	}, nil, nil)
 	evStopped := iutil.NewEvent(now, "instance-stopped", "default", "stopped", "").WithInstance(instStopped, true)
 
 	// 3. Instance with missing or whitespace-only domain.
 	instNoDomain := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.upstream": "8080",
+		"user.label.caddy.service": "no-domain",
 	}, nil, nil)
 	evNoDomain := iutil.NewEvent(now, "instance-started", "default", "no-domain", "").WithInstance(instNoDomain, true)
 
 	instWhitespaceDomain := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain": "   ",
+		"user.label.caddy": "   ",
 	}, nil, nil)
 	evWhitespaceDomain := iutil.NewEvent(now, "instance-started", "default", "white-domain", "").WithInstance(instWhitespaceDomain, true)
 
@@ -306,20 +333,19 @@ func TestExtractVhostsEdgeCases(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.0.1"}, nil),
 	}
 	instHostPort := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain":   "custom.lan",
-		"user.label.caddy.upstream": "192.168.50.1:9090",
+		"user.label.caddy": "custom.lan,upstream=192.168.50.1:9090",
 	}, ifaces, nil)
 	evHostPort := iutil.NewEvent(now, "instance-started", "default", "custom", "").WithInstance(instHostPort, true)
 
 	// 5. Instance with empty upstream port -> defaults to IP.
 	instBareIP := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain": "bare.lan",
+		"user.label.caddy": "bare.lan",
 	}, ifaces, nil)
 	evBareIP := iutil.NewEvent(now, "instance-started", "default", "bare", "").WithInstance(instBareIP, true)
 
 	// 6. Instance with no IP addresses -> upstream remains empty.
 	instNoIP := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain": "noip.lan,redir=https://fallback.lan",
+		"user.label.caddy": "noip.lan,redir=https://fallback.lan",
 	}, nil, nil)
 	evNoIP := iutil.NewEvent(now, "instance-started", "default", "noip", "").WithInstance(instNoIP, true)
 
@@ -347,8 +373,7 @@ func TestExtractVhostsMerging(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.0.1"}, nil),
 	}
 	inst1 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain":   "multi.lan",
-		"user.label.caddy.upstream": "8080",
+		"user.label.caddy": "multi.lan,upstream=8080",
 	}, ifaces1, nil)
 	ev1 := iutil.NewEvent(now, "instance-started", "default", "inst-1", "").WithInstance(inst1, true)
 
@@ -357,15 +382,13 @@ func TestExtractVhostsMerging(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.0.2"}, nil),
 	}
 	inst2 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain":   "multi.lan,redir=https://multi.com,template=custom_tmpl",
-		"user.label.caddy.upstream": "8080",
+		"user.label.caddy": "multi.lan,upstream=8080,redir=https://multi.com,template=custom_tmpl",
 	}, ifaces2, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "inst-2", "").WithInstance(inst2, true)
 
 	// Instance 3: same domain, duplicate upstream of inst1, attempt to overwrite redirect and template.
 	inst3 := iutil.NewInstance(true, map[string]string{
-		"user.label.caddy.domain":   "multi.lan,redir=https://overwrite.com,template=overwrite_tmpl",
-		"user.label.caddy.upstream": "8080",
+		"user.label.caddy": "multi.lan,upstream=8080,redir=https://overwrite.com,template=overwrite_tmpl",
 	}, ifaces1, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "inst-3", "").WithInstance(inst3, true)
 
@@ -429,9 +452,8 @@ func TestExtractVhostsWithRedirTemplate(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.10"}, nil),
 	}
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "example.com",
-		"user.label.edge.upstream": "8080",
-		"user.label.edge.redirs":   "old.example.com,template=custom_redir.caddyfile,no-uri default.example.com",
+		"user.label.edge":        "example.com,upstream=8080",
+		"user.label.edge.redirs": "old.example.com,template=custom_redir.caddyfile,no-uri default.example.com",
 	}, ifaces, nil)
 	now := time.Now()
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst, true)
@@ -459,9 +481,8 @@ func TestExtractVhostsWithRedirs(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.10"}, nil),
 	}
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "example.com",
-		"user.label.edge.upstream": "8080",
-		"user.label.edge.redirs":   "www.example.com,no-uri old.example.com,uri alias.example.com",
+		"user.label.edge":        "example.com,upstream=8080",
+		"user.label.edge.redirs": "www.example.com,no-uri old.example.com,uri alias.example.com",
 	}, ifaces, nil)
 	now := time.Now()
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst, true)
@@ -496,8 +517,7 @@ func TestExtractVhostsRedirsDeduplicationAndSelfFilter(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.10"}, nil),
 	}
 	inst1 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "example.com",
-		"user.label.edge.upstream": "8080",
+		"user.label.edge": "example.com,upstream=8080",
 		// example.com matches primary domain and must be ignored; www.example.com is repeated
 		"user.label.edge.redirs": "example.com,uri www.example.com",
 	}, ifaces1, nil)
@@ -507,9 +527,8 @@ func TestExtractVhostsRedirsDeduplicationAndSelfFilter(t *testing.T) {
 		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.11"}, nil),
 	}
 	inst2 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "example.com",
-		"user.label.edge.upstream": "8080",
-		"user.label.edge.redirs":   "www.example.com",
+		"user.label.edge":        "example.com,upstream=8080",
+		"user.label.edge.redirs": "www.example.com",
 	}, ifaces2, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "web-2", "").WithInstance(inst2, true)
 
@@ -526,7 +545,7 @@ func TestExtractVhostsRedirsDeduplicationAndSelfFilter(t *testing.T) {
 
 func TestExtractVhostsRedirsWithExplicitRedirect(t *testing.T) {
 	inst := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain": "old.com,redir=https://new.com{uri}",
+		"user.label.edge":        "old.com,redir=https://new.com{uri}",
 		"user.label.edge.redirs": "www.old.com,no-uri",
 	}, nil, nil)
 	now := time.Now()
@@ -604,6 +623,21 @@ func TestParseEntries(t *testing.T) {
 	require.Equal(t, "app2.test", entries[1].Value)
 	require.Equal(t, "2.2.2.2 2.0.0.2", entries[1].Flags["resolvers"])
 
+	// Quoted entries separated by commas (with and without space).
+	entries = parseEntries("\"entry1,instance=i1,project=p1\", \"entry2,instance=i2,project=p2\"")
+	require.Len(t, entries, 2)
+	require.Equal(t, "entry1", entries[0].Value)
+	require.Equal(t, "i1", entries[0].Flags["instance"])
+	require.Equal(t, "p1", entries[0].Flags["project"])
+	require.Equal(t, "entry2", entries[1].Value)
+	require.Equal(t, "i2", entries[1].Flags["instance"])
+	require.Equal(t, "p2", entries[1].Flags["project"])
+
+	entries = parseEntries("'entry1,instance=i1,project=p1','entry2,instance=i2,project=p2'")
+	require.Len(t, entries, 2)
+	require.Equal(t, "entry1", entries[0].Value)
+	require.Equal(t, "entry2", entries[1].Value)
+
 	// Empty and punctuation only.
 	require.Empty(t, parseEntries(""))
 	require.Empty(t, parseEntries("  ,  , "))
@@ -617,20 +651,19 @@ func TestExtractVhostsFlagsAndDomainModifiers(t *testing.T) {
 
 	// Instance 1: domain with flags, reverse proxy.
 	inst1 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "example.com,flag1=val1,flag2=val2",
-		"user.label.edge.upstream": "8080",
+		"user.label.edge": "example.com,upstream=8080,flag1=val1,flag2=val2",
 	}, ifaces, nil)
 	ev1 := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst1, true)
 
 	// Instance 2: redirect with no-uri and flags.
 	inst2 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain": "old.example.com,redir=https://new.example.com,no-uri,flag3=val3",
+		"user.label.edge": "old.example.com,redir=https://new.example.com,no-uri,flag3=val3",
 	}, nil, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "redir-1", "").WithInstance(inst2, true)
 
 	// Instance 3: domain with no-uri affecting redirect.
 	inst3 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain": "legacy.example.com,redir=https://new.example.com,no-uri",
+		"user.label.edge": "legacy.example.com,redir=https://new.example.com,no-uri",
 	}, nil, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "redir-2", "").WithInstance(inst3, true)
 
@@ -658,8 +691,7 @@ func TestExtractVhostsFlagsAndDomainModifiers(t *testing.T) {
 
 	// 4. docker-registry with quoted resolvers and registry flags.
 	inst4 := iutil.NewInstance(true, map[string]string{
-		"user.label.edge.domain":   "docker-registry.home.jochum.dev,resolvers='1.1.1.1 1.0.0.1',registry=\"docker.io\"",
-		"user.label.edge.upstream": "8080",
+		"user.label.edge": "docker-registry.home.jochum.dev,upstream=8080,resolvers='1.1.1.1 1.0.0.1',registry=\"docker.io\"",
 	}, ifaces, nil)
 	ev4 := iutil.NewEvent(now, "instance-started", "default", "registry-1", "").WithInstance(inst4, true)
 
@@ -679,8 +711,7 @@ func TestExtractVhostsCollectReplicasByService(t *testing.T) {
 	}
 	inst1 := iutil.NewInstance(true, map[string]string{
 		"user.incus-compose.service": "api",
-		"user.label.edge.domain":     "api.example.com",
-		"user.label.edge.upstream":   "8080",
+		"user.label.edge":            "api.example.com,upstream=8080",
 	}, ifaces1, nil)
 	ev1 := iutil.NewEvent(now, "instance-started", "default", "api-1", "").WithInstance(inst1, true)
 
@@ -720,8 +751,7 @@ func TestExtractVhostsServicePrefixOverride(t *testing.T) {
 	inst1 := iutil.NewInstance(true, map[string]string{
 		"user.label.edge.service":    "web",
 		"user.incus-compose.service": "ignored",
-		"user.label.edge.domain":     "web.lan",
-		"user.label.edge.upstream":   "3000",
+		"user.label.edge":            "web.lan,upstream=3000",
 	}, ifaces1, nil)
 	ev1 := iutil.NewEvent(now, "instance-started", "default", "srv-1", "").WithInstance(inst1, true)
 

@@ -127,8 +127,8 @@ caddy-config run \
   --caddy-instance "public,instance=caddy-external,project=default,internal,instance=caddy-internal,project=default"
 ```
 
-- Instances tagged with `user.label.public.domain` route to `caddy-external`.
-- Instances tagged with `user.label.internal.domain` route to `caddy-internal`.
+- Instances tagged with `user.label.public` route to `caddy-external`.
+- Instances tagged with `user.label.internal` route to `caddy-internal`.
 
 ---
 

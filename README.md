@@ -22,8 +22,7 @@ services:
     image: docker.io/library/busybox:latest
     command: httpd -f -p 8080
     labels:
-      edge.domain: "api.example.com"
-      edge.upstream: "8080"
+      edge: "api.example.com,upstream=8080"
 
 volumes:
   caddy-config:
@@ -160,8 +159,7 @@ services:
   web:
     image: docker.io/library/nginx:alpine
     labels:
-      edge.domain: "web.example.test"
-      edge.upstream: "80"
+      edge: "web.example.test,upstream=80"
 ```
 
 Deploy the service:
@@ -184,9 +182,7 @@ For a target bound to prefix `edge` (`--caddy-instance edge,instance=caddy,proje
 
 | Label in `compose.yaml` | Description                                                                                                                           |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `edge.domain`           | **(Required)** Domain name(s) with optional flags (e.g. `,redir=https://new.com`, `,template=custom.caddyfile`). Multiple domains separated by spaces. |
-| `edge.upstream`         | Upstream port (e.g. `8080`) or `host:port` override (e.g. `10.0.1.5:8080`).                                                           |
-| `edge.network`          | Network interface to resolve IPv4 from (e.g. `incusbr0`). Defaults to first non-loopback IPv4.                                        |
+| `edge`                  | **(Required)** Domain name(s) with optional flags (e.g. `,upstream=8080`, `,network=incusbr0`, `,redir=https://new.com`, `,template=custom.caddyfile`). Multiple domains separated by spaces. |
 | `edge.redirs`           | Alternate redirection domain(s) mapping to primary domain (e.g. `www.example.com,no-uri`).                                            |
 | `edge.service`          | Custom service name override (defaults to `user.incus-compose.service`).                                                              |
 

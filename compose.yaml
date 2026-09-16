@@ -10,9 +10,7 @@ name: caddy-stack
 #
 # Routing instances through this Caddy proxy:
 #   Set labels on routed instances:
-#     user.label.caddy.domain: "app.example.com"
-#     user.label.caddy.upstream: "8080"
-#     user.label.caddy.network: "eth0" # optional: interface for IPv4
+#     user.label.caddy: "app.example.com,upstream=8080" # optional flags: ,network=eth0
 
 services:
   caddy:

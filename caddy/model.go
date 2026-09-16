@@ -151,16 +151,23 @@ type parsedEntry struct {
 
 func trimQuotes(s string) string {
 	s = strings.TrimSpace(s)
-	if len(s) >= 2 {
-		first := s[0]
-		last := s[len(s)-1]
-		quoted := (first == '"' && last == '"') || (first == '\'' && last == '\'')
-		if quoted {
-			return s[1 : len(s)-1]
+	if len(s) < 2 {
+		return s
+	}
+
+	quote := s[0]
+	isQuote := quote == '"' || quote == '\''
+	if !isQuote || s[len(s)-1] != quote {
+		return s
+	}
+
+	for i := 1; i < len(s)-1; i++ {
+		if s[i] == quote && s[i-1] != '\\' {
+			return s
 		}
 	}
 
-	return s
+	return s[1 : len(s)-1]
 }
 
 func splitTokensQuoteAware(raw string) []string {
@@ -227,6 +234,44 @@ func splitTokensQuoteAware(raw string) []string {
 		} else {
 			if r == inQuote {
 				inQuote = 0
+				cur.WriteRune(r)
+
+				curStr := cur.String()
+				isFullyQuoted := len(curStr) > 0 && rune(curStr[0]) == r
+				if isFullyQuoted {
+					k := i + 1
+					for k < n && unicode.IsSpace(runes[k]) {
+						k++
+					}
+
+					hasSemi := k < n && runes[k] == ';'
+					if hasSemi {
+						tokens = append(tokens, curStr)
+						cur.Reset()
+						k++
+						for k < n && unicode.IsSpace(runes[k]) {
+							k++
+						}
+						i = k - 1
+					}
+
+					hasComma := k < n && runes[k] == ','
+					if hasComma {
+						next := k + 1
+						for next < n && unicode.IsSpace(runes[next]) {
+							next++
+						}
+
+						nextIsQuote := next < n && (runes[next] == '"' || runes[next] == '\'')
+						if nextIsQuote {
+							tokens = append(tokens, curStr)
+							cur.Reset()
+							i = next - 1
+						}
+					}
+				}
+
+				continue
 			}
 			cur.WriteRune(r)
 		}
@@ -404,15 +449,15 @@ func resolveService(inst *iutil.Instance, prefix string) string {
 
 // extractVhosts extracts and groups vhost routes for a target label from instance events.
 func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
-	prefix := "user.label." + targetLabel + "."
+	labelKey := "user.label." + targetLabel
+	prefix := labelKey + "."
 	vhostMap := make(map[string]*vhost)
 	order := make([]string, 0)
 
 	type serviceConfig struct {
-		domain       string
-		upstreamPort string
-		network      string
-		redirs       string
+		domain  string
+		network string
+		redirs  string
 	}
 	serviceConfigs := make(map[string]serviceConfig)
 
@@ -427,14 +472,25 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 			continue
 		}
 
-		domain, _ := inst.ConfigValue(prefix + "domain")
+		domain, _ := inst.ConfigValue(labelKey)
+		if domain == "" {
+			domain, _ = inst.ConfigValue(prefix + "domain")
+		}
 		domain = strings.TrimSpace(domain)
-
-		upstreamPort, _ := inst.ConfigValue(prefix + "upstream")
-		upstreamPort = strings.TrimSpace(upstreamPort)
 
 		network, _ := inst.ConfigValue(prefix + "network")
 		network = strings.TrimSpace(network)
+
+		if domain != "" {
+			entries := parseEntries(domain)
+			for _, de := range entries {
+				netVal, ok := de.Flags["network"]
+				if ok && netVal != "" {
+					network = netVal
+					break
+				}
+			}
+		}
 
 		redirs, _ := inst.ConfigValue(prefix + "redirs")
 		redirs = strings.TrimSpace(redirs)
@@ -442,9 +498,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		cfg := serviceConfigs[service]
 		if cfg.domain == "" && domain != "" {
 			cfg.domain = domain
-		}
-		if cfg.upstreamPort == "" && upstreamPort != "" {
-			cfg.upstreamPort = upstreamPort
 		}
 		if cfg.network == "" && network != "" {
 			cfg.network = network
@@ -463,14 +516,14 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 
 		service := resolveService(inst, prefix)
 
-		domain, _ := inst.ConfigValue(prefix + "domain")
+		domain, _ := inst.ConfigValue(labelKey)
+		if domain == "" {
+			domain, _ = inst.ConfigValue(prefix + "domain")
+		}
 		domain = strings.TrimSpace(domain)
 
 		redirs, _ := inst.ConfigValue(prefix + "redirs")
 		redirs = strings.TrimSpace(redirs)
-
-		upstreamPort, _ := inst.ConfigValue(prefix + "upstream")
-		upstreamPort = strings.TrimSpace(upstreamPort)
 
 		network, _ := inst.ConfigValue(prefix + "network")
 		network = strings.TrimSpace(network)
@@ -483,9 +536,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 			if redirs == "" {
 				redirs = cfg.redirs
 			}
-			if upstreamPort == "" {
-				upstreamPort = cfg.upstreamPort
-			}
 			if network == "" {
 				network = cfg.network
 			}
@@ -493,20 +543,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 
 		if domain == "" && redirs == "" {
 			continue
-		}
-
-		ip := resolveIPv4(inst, network)
-		var upstream string
-		if ip != "" {
-			if upstreamPort != "" {
-				if strings.Contains(upstreamPort, ":") {
-					upstream = upstreamPort
-				} else {
-					upstream = fmt.Sprintf("%s:%s", ip, upstreamPort)
-				}
-			} else {
-				upstream = ip
-			}
 		}
 
 		var cleanDomain string
@@ -530,6 +566,15 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 			cleanDomain = strings.Join(domainNames, " ")
 		}
 
+		netFlag, ok := domainFlags["network"]
+		if ok && netFlag != "" {
+			network = netFlag
+		}
+
+		if redirs == "" {
+			redirs = domainFlags["redirs"]
+		}
+
 		var redirectURL string
 		redirVal, hasRedir := domainFlags["redir"]
 		if hasRedir && redirVal != "" {
@@ -542,6 +587,25 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 				}
 			} else {
 				redirectURL = strings.TrimSuffix(redirectURL, "{uri}")
+			}
+		}
+
+		ip := resolveIPv4(inst, network)
+		var upstream string
+		upstreamVal, hasUpstream := domainFlags["upstream"]
+		if ip != "" {
+			if hasUpstream {
+				if upstreamVal != "" && upstreamVal != "true" {
+					if strings.Contains(upstreamVal, ":") {
+						upstream = upstreamVal
+					} else {
+						upstream = fmt.Sprintf("%s:%s", ip, upstreamVal)
+					}
+				} else if upstreamVal != "false" && upstreamVal != "none" {
+					upstream = ip
+				}
+			} else if redirectURL == "" {
+				upstream = ip
 			}
 		}
 

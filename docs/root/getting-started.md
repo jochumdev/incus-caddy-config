@@ -106,7 +106,7 @@ On first start:
 
 ## Step 3: Route an Application
 
-To expose any container or virtual machine through Caddy, add `edge.domain` and `edge.upstream` labels:
+To expose any container or virtual machine through Caddy, add an `edge` label with an `upstream` flag:
 
 ```yaml
 services:
@@ -114,8 +114,7 @@ services:
     image: docker.io/library/busybox:latest
     command: httpd -f -p 8080
     labels:
-      edge.domain: "api.example.test"
-      edge.upstream: "8080"
+      edge: "api.example.test,upstream=8080"
 ```
 
 Deploy the service:
