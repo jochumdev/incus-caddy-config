@@ -43,7 +43,7 @@ func TestRunCommandFlags(t *testing.T) {
 		"--os-path", "/etc/caddy/Caddyfile",
 		"--os-path", "edge:/var/caddy/Caddyfile",
 		"--caddyfile-path", "/etc/caddy/Caddyfile",
-		"--custom-templates-dir", "/etc/caddy/templates",
+		"--templates-dir", "/etc/caddy/templates",
 		"--global-template", "caddy:/etc/caddy/templates/global.caddyfile",
 		"--global-template", "edge:/etc/caddy/templates/edge.global.caddyfile",
 		"--debounce-window", "500ms",
@@ -72,7 +72,7 @@ func TestRunCommandFlags(t *testing.T) {
 	require.Equal(t, []string{"external:default:caddy-prod"}, cfg.CaddyInstances)
 	require.Equal(t, []string{"/etc/caddy/Caddyfile", "edge:/var/caddy/Caddyfile"}, cfg.OSTargets)
 	require.Equal(t, "/etc/caddy/Caddyfile", cfg.CaddyfilePath)
-	require.Equal(t, "/etc/caddy/templates", cfg.CustomTemplatesDir)
+	require.Equal(t, "/etc/caddy/templates", cfg.TemplatesDir)
 	require.Equal(t, []string{"caddy:/etc/caddy/templates/global.caddyfile", "edge:/etc/caddy/templates/edge.global.caddyfile"}, cfg.GlobalTemplates)
 	require.Equal(t, 500*time.Millisecond, cfg.DebounceWindow)
 	require.Equal(t, ":9090", cfg.HTTPAddr)

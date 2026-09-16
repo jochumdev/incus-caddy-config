@@ -87,7 +87,7 @@ When you scale, stop, start, or rename instances, Caddy reloads within milliseco
 - **Safe Atomic Swaps**: Renders in-memory, writes to `/.Caddyfile.tmp`, verifies syntax with `caddy validate` inside the container, and atomically swaps via `sftp.PosixRename`. Broken configurations are rejected before touching the active site.
 - **Single Goroutine Concurrency**: State reconciliation is strictly confined to a single goroutine (Rule A4). No mutexes, lock contention, or race hazards.
 - **Warm Gating**: Changes are suppressed while the event chain is cold (`ChainCold`). Deployments only run once the fleet sweep completes (`ChainWarm`), eliminating route churn on startup.
-- **Flexible Custom Templating**: Full support for custom site blocks via inline Go templates or external template directories (`--custom-templates-dir`).
+- **Flexible Custom Templating**: Full support for custom site blocks via inline Go templates or external template directories (`--templates-dir`).
 
 ---
 

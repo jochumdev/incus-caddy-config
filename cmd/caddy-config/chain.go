@@ -62,11 +62,11 @@ func chain(logger *slog.Logger, args *mainActionArgs) []position {
 		position{plugin: caddy.New(
 			logger,
 			caddy.Config{
-				Targets:            args.Targets,
-				OSTargets:          args.OSTargets,
-				CaddyfilePath:      args.CaddyfilePath,
-				CustomTemplatesDir: args.CustomTemplatesDir,
-				GlobalTemplates:    args.GlobalTemplates,
+				Targets:         args.Targets,
+				OSTargets:       args.OSTargets,
+				CaddyfilePath:   args.CaddyfilePath,
+				TemplatesDir:    args.TemplatesDir,
+				GlobalTemplates: args.GlobalTemplates,
 			},
 		)},
 		position{plugin: http.New(logger, http.Listen(args.HTTPAddr), http.Pprof(args.Pprof)), optional: true},

@@ -65,7 +65,7 @@ For a target bound to prefix `edge`:
 | `user.label.edge.upstream` | Target port or `host:port` override. If omitted, routes to container IP on default HTTP port. | `8080`, `3000`, or `10.0.1.50:9090` |
 | `user.label.edge.network` | Incus network interface name to resolve IPv4 from. Defaults to the first valid non-loopback IPv4 address. | `incusbr0`, `eth0`, or `internal` |
 | `user.label.edge.redirect` | Target URL for permanent redirects (renders `redir <url> permanent`). | `https://example.com{uri}` |
-| `user.label.edge.template` | Custom vhost template name in `--custom-templates-dir` or an inline Go template. | `php_site` or inline site block |
+| `user.label.edge.template` | Custom vhost template name in `--templates-dir` or an inline Go template. | `php_site` or inline site block |
 | `user.label.edge.service` | Custom service name override (defaults to `user.label.incus-compose.service`). | `payments-api` |
 
 ---

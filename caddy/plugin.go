@@ -18,12 +18,12 @@ const defaultInboxSize = 256
 
 // Config configures the Caddy event plugin.
 type Config struct {
-	Targets            []Target
-	OSTargets          []OSTarget
-	CaddyfilePath      string
-	CustomTemplatesDir string
-	GlobalTemplates    map[string]string
-	InboxSize          int
+	Targets         []Target
+	OSTargets       []OSTarget
+	CaddyfilePath   string
+	TemplatesDir    string
+	GlobalTemplates map[string]string
+	InboxSize       int
 }
 
 // Plugin consumes enriched instance events and deploys Caddyfiles to target instances.
@@ -239,7 +239,7 @@ func (p *Plugin) reconcile(ctx context.Context) {
 		vhosts := extractVhosts(target.Label, instances)
 
 		globalTmpl := p.cfg.GlobalTemplates[target.Label]
-		content, err := render(vhosts, p.cfg.CustomTemplatesDir, globalTmpl)
+		content, err := render(vhosts, p.cfg.TemplatesDir, globalTmpl)
 		if err != nil {
 			p.logger.Error("rendering Caddyfile", "label", target.Label, "err", err)
 
@@ -272,7 +272,7 @@ func (p *Plugin) reconcile(ctx context.Context) {
 		vhosts := extractVhosts(target.Label, instances)
 
 		globalTmpl := p.cfg.GlobalTemplates[target.Label]
-		content, err := render(vhosts, p.cfg.CustomTemplatesDir, globalTmpl)
+		content, err := render(vhosts, p.cfg.TemplatesDir, globalTmpl)
 		if err != nil {
 			p.logger.Error("rendering Caddyfile for OS target", "label", target.Label, "path", target.Path, "err", err)
 

@@ -79,7 +79,7 @@ flowchart TD
 - **Single Goroutine Concurrency**: Concurrency model strictly confined to a single goroutine (Rule A4). Zero mutexes, race-free event processing, and orderly reconciliation.
 - **Warm Gating**: Reconciliations are suppressed while the event chain is cold (`ChainCold`). Deployments only trigger after the initial fleet sweep completes (`ChainWarm`), eliminating route churn during daemon reconnects.
 - **Automatic Load Balancing**: Multiple instances sharing the same domain label are automatically aggregated and sorted into a single load-balanced `reverse_proxy` directive.
-- **Custom Vhost & Global Templating**: Supports custom site blocks via external template directories (`--custom-templates-dir`) and overriding the global options block per target label via inline Go templates or file paths (`--global-template`).
+- **Custom Vhost & Global Templating**: Supports custom site blocks via external template directories (`--templates-dir`) and overriding the global options block per target label via inline Go templates or file paths (`--global-template`).
 - **Observability**: Built-in HTTP endpoints on `:9153` for liveness (`/health`), fleet readiness (`/ready`), and Go runtime profiling (`/debug/pprof`).
 
 ---

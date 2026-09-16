@@ -132,9 +132,9 @@ services:
         }
 ```
 
-### 2. External Template Directory (`--custom-templates-dir`)
+### 2. External Template Directory (`--templates-dir`)
 
-For reusable site configurations, store templates in a directory mounted to `caddy-config` and pass `--custom-templates-dir /etc/caddy/templates`.
+For reusable site configurations, store templates in a directory mounted to `caddy-config` and pass `--templates-dir /etc/caddy/templates`.
 
 When an instance specifies `edge.template: "spa_site"`, `caddy-config` searches the custom templates directory in the following order:
 1. `/etc/caddy/templates/spa_site`

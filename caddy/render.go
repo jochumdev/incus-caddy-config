@@ -26,7 +26,7 @@ const defaultVhostTemplate = `{{ .Domain }} {
 `
 
 // render renders the complete Caddyfile for a list of vhosts.
-func render(vhosts []vhost, customTemplatesDir, globalTemplate string) ([]byte, error) {
+func render(vhosts []vhost, templatesDir, globalTemplate string) ([]byte, error) {
 	var buf bytes.Buffer
 
 	defaultGlobalTmpl, err := template.New("default_global").Parse(defaultBaseTemplate)
@@ -64,7 +64,7 @@ func render(vhosts []vhost, customTemplatesDir, globalTemplate string) ([]byte, 
 	}
 
 	for _, v := range vhosts {
-		tmpl, err := resolveTemplate(v, customTemplatesDir, defaultTmpl)
+		tmpl, err := resolveTemplate(v, templatesDir, defaultTmpl)
 		if err != nil {
 			return nil, fmt.Errorf("resolving template for domain %q: %w", v.Domain, err)
 		}
@@ -114,17 +114,17 @@ func loadGlobalTemplate(globalTemplate string) (*template.Template, error) {
 }
 
 // resolveTemplate returns the template to use for a vhost.
-func resolveTemplate(v vhost, customTemplatesDir string, defaultTmpl *template.Template) (*template.Template, error) {
+func resolveTemplate(v vhost, templatesDir string, defaultTmpl *template.Template) (*template.Template, error) {
 	if v.Template == "" {
 		return defaultTmpl, nil
 	}
 
-	// 1. Check if it matches a template file in customTemplatesDir.
-	if customTemplatesDir != "" {
+	// 1. Check if it matches a template file in templatesDir.
+	if templatesDir != "" {
 		candidates := []string{
-			filepath.Join(customTemplatesDir, v.Template),
-			filepath.Join(customTemplatesDir, v.Template+".tmpl"),
-			filepath.Join(customTemplatesDir, v.Template+".caddyfile"),
+			filepath.Join(templatesDir, v.Template),
+			filepath.Join(templatesDir, v.Template+".tmpl"),
+			filepath.Join(templatesDir, v.Template+".caddyfile"),
 		}
 
 		for _, path := range candidates {

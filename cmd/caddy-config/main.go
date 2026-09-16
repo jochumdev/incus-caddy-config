@@ -134,10 +134,10 @@ func runCommand(cfg *config) *cli.Command {
 				Sources:     cli.EnvVars("INCUS_CADDY_CADDYFILE_PATH"),
 			},
 			&cli.StringFlag{
-				Name:        "custom-templates-dir",
+				Name:        "templates-dir",
 				Usage:       "Directory containing custom vhost templates",
-				Destination: &cfg.CustomTemplatesDir,
-				Sources:     cli.EnvVars("INCUS_CADDY_CUSTOM_TEMPLATES_DIR"),
+				Destination: &cfg.TemplatesDir,
+				Sources:     cli.EnvVars("INCUS_CADDY_TEMPLATES_DIR"),
 			},
 			&cli.StringSliceFlag{
 				Name:        "global-template",
@@ -259,7 +259,7 @@ func mainAction(ctx context.Context, args *mainActionArgs) error {
 		"data_dir", args.DataDir,
 		"secrets_dir", args.SecretsDir,
 		"token", args.redactedToken(),
-		"custom_templates_dir", args.CustomTemplatesDir,
+		"templates_dir", args.TemplatesDir,
 		"global_templates", args.GlobalTemplates,
 		"debounce_window", args.DebounceWindow,
 		"workers", args.Workers,
