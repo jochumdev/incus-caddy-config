@@ -240,10 +240,11 @@ func parseEntries(raw string) []parsedEntry {
 	return entries
 }
 
-// redirEntry holds a redirection domain and whether to preserve the request URI.
+// redirEntry holds a redirection domain, whether to preserve the request URI, and an optional template.
 type redirEntry struct {
 	Domain     string
 	IncludeURI bool
+	Template   string
 }
 
 // parseRedirs parses a whitespace-separated list of redirection domains and flags.
@@ -251,11 +252,18 @@ func parseRedirs(raw string) []redirEntry {
 	entries := parseEntries(raw)
 	redirs := make([]redirEntry, 0, len(entries))
 	for _, e := range entries {
+		tmpl := e.Flags["template"]
+		if tmpl == "" {
+			tmpl = e.Flags["tmpl"]
+		}
+
 		redirs = append(redirs, redirEntry{
 			Domain:     e.Value,
 			IncludeURI: e.Flags["uri"] != "false",
+			Template:   tmpl,
 		})
 	}
+
 	return redirs
 }
 
@@ -454,6 +462,13 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 			}
 		}
 
+		if tmpl == "" {
+			tmpl = domainFlags["template"]
+			if tmpl == "" {
+				tmpl = domainFlags["tmpl"]
+			}
+		}
+
 		if cleanDomain != "" {
 			existing, found := vhostMap[cleanDomain]
 			if !found {
@@ -530,18 +545,27 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 						targetURL = strings.TrimSuffix(targetURL, "{uri}")
 					}
 
+					redirTmpl := entry.Flags["template"]
+					if redirTmpl == "" {
+						redirTmpl = entry.Flags["tmpl"]
+					}
+
 					existingRedir, found := vhostMap[entry.Value]
 					if !found {
 						vhostMap[entry.Value] = &vhost{
 							Domain:   entry.Value,
 							Service:  service,
 							Redirect: targetURL,
+							Template: redirTmpl,
 							Flags:    entry.Flags,
 						}
 						order = append(order, entry.Value)
 					} else {
 						if len(existingRedir.Upstreams) == 0 && existingRedir.Redirect == "" {
 							existingRedir.Redirect = targetURL
+						}
+						if existingRedir.Template == "" && redirTmpl != "" {
+							existingRedir.Template = redirTmpl
 						}
 						if existingRedir.Service == "" && service != "" {
 							existingRedir.Service = service

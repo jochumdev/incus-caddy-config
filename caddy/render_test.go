@@ -288,3 +288,27 @@ func TestRendererGlobalTemplateInTemplatesDir(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(content), "# internal-global")
 }
+
+func TestRendererRedirWithCustomTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	redirTmplFile := filepath.Join(tmpDir, "custom_redir.caddyfile")
+	err := os.WriteFile(redirTmplFile, []byte(`{{ .Domain }} {
+	redir {{ .Redirect }} 301
+}`), 0600)
+	require.NoError(t, err)
+
+	vhosts := []vhost{
+		{
+			Domain:   "old.example.com",
+			Redirect: "https://example.com{uri}",
+			Template: "custom_redir.caddyfile",
+		},
+	}
+
+	content, err := render(vhosts, tmpDir, "")
+	require.NoError(t, err)
+
+	out := string(content)
+	require.Contains(t, out, "old.example.com {")
+	require.Contains(t, out, "redir https://example.com{uri} 301")
+}

@@ -418,9 +418,46 @@ func TestParseRedirs(t *testing.T) {
 	require.False(t, entries[0].IncludeURI)
 	require.True(t, entries[1].IncludeURI)
 
+	// Flags with custom template.
+	entries = parseRedirs("www.example.com,template=sometemplate.caddyfile,no-uri")
+	require.Len(t, entries, 1)
+	require.Equal(t, "www.example.com", entries[0].Domain)
+	require.False(t, entries[0].IncludeURI)
+	require.Equal(t, "sometemplate.caddyfile", entries[0].Template)
+
 	// Empty and punctuation only.
 	require.Empty(t, parseRedirs(""))
 	require.Empty(t, parseRedirs("  ,  , "))
+}
+
+func TestExtractVhostsWithRedirTemplate(t *testing.T) {
+	ifaces := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.10"}, nil),
+	}
+	inst := iutil.NewInstance(true, map[string]string{
+		"user.label.edge.domain":   "example.com",
+		"user.label.edge.upstream": "8080",
+		"user.label.edge.redirs":   "old.example.com,template=custom_redir.caddyfile,no-uri default.example.com",
+	}, ifaces, nil)
+	now := time.Now()
+	ev := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst, true)
+
+	vhosts := extractVhosts("edge", []*iutil.Event{ev})
+	require.Len(t, vhosts, 3)
+
+	// Primary domain
+	require.Equal(t, "example.com", vhosts[0].Domain)
+	require.Empty(t, vhosts[0].Template)
+
+	// Redir with custom template
+	require.Equal(t, "old.example.com", vhosts[1].Domain)
+	require.Equal(t, "https://example.com", vhosts[1].Redirect)
+	require.Equal(t, "custom_redir.caddyfile", vhosts[1].Template)
+
+	// Redir without custom template
+	require.Equal(t, "default.example.com", vhosts[2].Domain)
+	require.Equal(t, "https://example.com{uri}", vhosts[2].Redirect)
+	require.Empty(t, vhosts[2].Template)
 }
 
 func TestExtractVhostsWithRedirs(t *testing.T) {
