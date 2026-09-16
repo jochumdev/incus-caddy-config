@@ -114,12 +114,17 @@ caddy-config run \
 
 ### Multiple Caddy Servers
 
-You can route different services to different Caddy instances using separate label prefixes:
+You can route different services to different Caddy instances using separate label prefixes (via repeated flags or comma-separated):
 
 ```bash
+# Repeated flags
 caddy-config run \
   --caddy-instance public:default:caddy-external \
   --caddy-instance internal:default:caddy-internal
+
+# Or comma-separated
+caddy-config run \
+  --caddy-instance "public:default:caddy-external,internal:default:caddy-internal"
 ```
 
 - Instances tagged with `user.label.public.domain` route to `caddy-external`.

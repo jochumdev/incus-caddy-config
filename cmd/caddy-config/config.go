@@ -32,9 +32,9 @@ type config struct {
 	Remote     string
 	UseRemote  bool
 
-	Projects       []string
-	CaddyInstances []string
-	OSTargets      []string
+	Projects  []string
+	Targets   []caddy.Target
+	OSTargets []caddy.Target
 
 	CaddyfilePath   string
 	TemplatesDir    string
@@ -65,7 +65,7 @@ type mainActionArgs struct {
 
 	Projects  []string
 	Targets   []caddy.Target
-	OSTargets []caddy.OSTarget
+	OSTargets []caddy.Target
 
 	CaddyfilePath   string
 	TemplatesDir    string
@@ -98,28 +98,8 @@ func newConfig() *config {
 }
 
 func (c *config) validate() (*mainActionArgs, error) {
-	if len(c.CaddyInstances) == 0 && len(c.OSTargets) == 0 {
+	if len(c.Targets) == 0 && len(c.OSTargets) == 0 {
 		return nil, errors.New("at least one --caddy-instance or --os-path must be specified")
-	}
-
-	targets := make([]caddy.Target, 0, len(c.CaddyInstances))
-	for _, entry := range c.CaddyInstances {
-		target, err := caddy.ParseTarget(entry)
-		if err != nil {
-			return nil, fmt.Errorf("invalid --caddy-instance %q: %w", entry, err)
-		}
-
-		targets = append(targets, target)
-	}
-
-	osTargets := make([]caddy.OSTarget, 0, len(c.OSTargets))
-	for _, entry := range c.OSTargets {
-		target, err := caddy.ParseOSTarget(entry)
-		if err != nil {
-			return nil, fmt.Errorf("invalid --os-path %q: %w", entry, err)
-		}
-
-		osTargets = append(osTargets, target)
 	}
 
 	globalTemplates := make(map[string]string)
@@ -143,8 +123,8 @@ func (c *config) validate() (*mainActionArgs, error) {
 		Remote:          c.Remote,
 		UseRemote:       c.UseRemote,
 		Projects:        c.Projects,
-		Targets:         targets,
-		OSTargets:       osTargets,
+		Targets:         c.Targets,
+		OSTargets:       c.OSTargets,
 		CaddyfilePath:   c.CaddyfilePath,
 		TemplatesDir:    c.TemplatesDir,
 		GlobalTemplates: globalTemplates,

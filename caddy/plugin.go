@@ -19,7 +19,7 @@ const defaultInboxSize = 256
 // Config configures the Caddy event plugin.
 type Config struct {
 	Targets         []Target
-	OSTargets       []OSTarget
+	OSTargets       []Target
 	CaddyfilePath   string
 	TemplatesDir    string
 	GlobalTemplates map[string]string

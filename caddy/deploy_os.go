@@ -14,7 +14,7 @@ import (
 var execCommand = exec.CommandContext
 
 // deployOS stages, validates, atomically renames, and reloads the Caddyfile on the local filesystem.
-func deployOS(ctx context.Context, logger *slog.Logger, target OSTarget, content []byte) error {
+func deployOS(ctx context.Context, logger *slog.Logger, target Target, content []byte) error {
 	caddyfilePath := target.Path
 	dir := filepath.Dir(caddyfilePath)
 

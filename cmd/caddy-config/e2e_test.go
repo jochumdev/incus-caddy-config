@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/jochumdev/incus-caddy-config/caddy"
 )
 
 func skipE2E(t *testing.T) {
@@ -84,7 +86,7 @@ func TestE2ECaddyReverseProxy(t *testing.T) {
 	defer configCancel()
 
 	cfg := newConfig()
-	cfg.CaddyInstances = []string{fmt.Sprintf("edge:%s:caddy", project)}
+	cfg.Targets = []caddy.Target{{Label: "edge", Project: project, Instance: "caddy"}}
 	cfg.Projects = []string{project}
 	cfg.Remote = incusRemote()
 	cfg.UseRemote = true

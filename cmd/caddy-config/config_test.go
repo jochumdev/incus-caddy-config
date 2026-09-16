@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/jochumdev/incus-caddy-config/caddy"
 )
 
 func TestConfigDefaults(t *testing.T) {
@@ -21,17 +23,11 @@ func TestConfigValidate(t *testing.T) {
 	_, err := cfg.validate()
 	require.ErrorContains(t, err, "at least one --caddy-instance or --os-path must be specified")
 
-	cfg.CaddyInstances = []string{"invalid-target"}
-	_, err = cfg.validate()
-	require.ErrorContains(t, err, "invalid --caddy-instance")
-
-	cfg.CaddyInstances = nil
-	cfg.OSTargets = []string{"edge:"}
-	_, err = cfg.validate()
-	require.ErrorContains(t, err, "invalid --os-path")
-
 	// Valid OS target with bare path and explicit prefix.
-	cfg.OSTargets = []string{"/etc/caddy/Caddyfile", "custom:/var/caddy/Caddyfile"}
+	cfg.OSTargets = []caddy.Target{
+		{Label: "caddy", Path: "/etc/caddy/Caddyfile"},
+		{Label: "custom", Path: "/var/caddy/Caddyfile"},
+	}
 	args, err := cfg.validate()
 	require.NoError(t, err)
 	require.Empty(t, args.Targets)
@@ -41,8 +37,11 @@ func TestConfigValidate(t *testing.T) {
 	require.Equal(t, "custom", args.OSTargets[1].Label)
 	require.Equal(t, "/var/caddy/Caddyfile", args.OSTargets[1].Path)
 
-	// Both CaddyInstances and OSTargets.
-	cfg.CaddyInstances = []string{"external:default:caddy-prod", "internal:infra:caddy-dev"}
+	// Both Targets and OSTargets.
+	cfg.Targets = []caddy.Target{
+		{Label: "external", Project: "default", Instance: "caddy-prod"},
+		{Label: "internal", Project: "infra", Instance: "caddy-dev"},
+	}
 	args, err = cfg.validate()
 	require.NoError(t, err)
 	require.Len(t, args.Targets, 2)
@@ -74,7 +73,7 @@ func TestConfigValidate(t *testing.T) {
 
 func TestConfigEndpoint(t *testing.T) {
 	cfg := newConfig()
-	cfg.CaddyInstances = []string{"caddy:default:caddy"}
+	cfg.Targets = []caddy.Target{{Label: "caddy", Project: "default", Instance: "caddy"}}
 	args, err := cfg.validate()
 	require.NoError(t, err)
 	require.Empty(t, args.endpoint())
@@ -92,7 +91,7 @@ func TestConfigEndpoint(t *testing.T) {
 
 func TestConfigRedactedToken(t *testing.T) {
 	cfg := newConfig()
-	cfg.CaddyInstances = []string{"caddy:default:caddy"}
+	cfg.Targets = []caddy.Target{{Label: "caddy", Project: "default", Instance: "caddy"}}
 	args, err := cfg.validate()
 	require.NoError(t, err)
 	require.Empty(t, args.redactedToken())

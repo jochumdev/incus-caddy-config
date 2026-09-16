@@ -114,15 +114,15 @@ func runCommand(cfg *config) *cli.Command {
 				Destination: &cfg.Projects,
 				Sources:     cli.EnvVars("INCUS_CADDY_PROJECTS"),
 			},
-			&cli.StringSliceFlag{
+			&TargetFlag{
 				Name:        "caddy-instance",
-				Usage:       "Target Caddy server in format 'label:project:instance'; can be repeated",
-				Destination: &cfg.CaddyInstances,
+				Usage:       "Target Caddy server in format 'label:project:instance[,flags...]'; repeatable or comma/space-separated",
+				Destination: &cfg.Targets,
 				Sources:     cli.EnvVars("INCUS_CADDY_INSTANCES"),
 			},
-			&cli.StringSliceFlag{
+			&TargetFlag{
 				Name:        "os-path",
-				Usage:       "Target local Caddyfile in format '[label:]path'; can be repeated",
+				Usage:       "Target local Caddyfile in format '[label:]path[,flags...]'; repeatable or comma/space-separated",
 				Destination: &cfg.OSTargets,
 				Sources:     cli.EnvVars("INCUS_CADDY_OS_PATH"),
 			},

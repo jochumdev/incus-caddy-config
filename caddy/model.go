@@ -14,56 +14,201 @@ type Target struct {
 	Label    string
 	Project  string
 	Instance string
+	Path     string
+	Flags    map[string]string
 }
 
-// ParseTarget parses a "label:project:instance" specification.
+// IsOS reports whether the target points to a local filesystem Caddyfile rather than an Incus container.
+func (t Target) IsOS() bool {
+	return t.Path != ""
+}
+
+// String returns the string representation of Target,
+// including comma-separated flags if present.
+func (t Target) String() string {
+	var base string
+	if t.IsOS() {
+		if t.Label == "caddy" || t.Label == "" {
+			base = t.Path
+		} else {
+			base = fmt.Sprintf("%s:%s", t.Label, t.Path)
+		}
+	} else {
+		base = fmt.Sprintf("%s:%s:%s", t.Label, t.Project, t.Instance)
+	}
+
+	if len(t.Flags) == 0 {
+		return base
+	}
+
+	keys := make([]string, 0, len(t.Flags))
+	for k := range t.Flags {
+		keys = append(keys, k)
+	}
+
+	slices.Sort(keys)
+
+	parts := []string{base}
+	for _, k := range keys {
+		v := t.Flags[k]
+		if (k == "uri" || k == "no-uri") && v == "true" {
+			parts = append(parts, k)
+		} else {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// ParseTargets parses whitespace- or comma-separated targets with optional comma-separated flags.
+func ParseTargets(s string) ([]Target, error) {
+	entries := parseEntries(s)
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("empty target")
+	}
+
+	targets := make([]Target, 0, len(entries))
+	for _, e := range entries {
+		t, err := parseTargetEntry(e)
+		if err != nil {
+			return nil, err
+		}
+
+		targets = append(targets, t)
+	}
+
+	return targets, nil
+}
+
+// ParseTarget parses a single "label:project:instance" specification with optional flags.
 func ParseTarget(s string) (Target, error) {
-	parts := strings.Split(s, ":")
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	targets, err := ParseTargets(s)
+	if err != nil {
+		return Target{}, err
+	}
+
+	if len(targets) != 1 {
+		return Target{}, fmt.Errorf("invalid target %q: expected single target", s)
+	}
+
+	if targets[0].IsOS() {
 		return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance'", s)
 	}
 
-	return Target{
-		Label:    parts[0],
-		Project:  parts[1],
-		Instance: parts[2],
-	}, nil
+	return targets[0], nil
 }
 
-// OSTarget represents a local filesystem Caddyfile target on the same host or container.
-type OSTarget struct {
-	Label string
-	Path  string
-}
-
-// ParseOSTarget parses a "[label:]path" specification, defaulting to label "caddy" if omitted.
-func ParseOSTarget(s string) (OSTarget, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return OSTarget{}, fmt.Errorf("empty OS target")
+// ParseOSTargets parses whitespace- or comma-separated OS targets with optional comma-separated flags.
+func ParseOSTargets(s string) ([]Target, error) {
+	targets, err := ParseTargets(s)
+	if err != nil {
+		return nil, err
 	}
 
-	idx := strings.Index(s, ":")
+	for _, t := range targets {
+		if !t.IsOS() {
+			return nil, fmt.Errorf("invalid OS target: expected '[label:]path'")
+		}
+	}
+
+	return targets, nil
+}
+
+// ParseOSTarget parses a single "[label:]path" specification, defaulting to label "caddy" if omitted.
+func ParseOSTarget(s string) (Target, error) {
+	targets, err := ParseTargets(s)
+	if err != nil {
+		return Target{}, err
+	}
+
+	if len(targets) != 1 {
+		return Target{}, fmt.Errorf("invalid OS target %q: expected single target", s)
+	}
+
+	if !targets[0].IsOS() {
+		return Target{}, fmt.Errorf("invalid OS target %q: expected '[label:]path'", s)
+	}
+
+	return targets[0], nil
+}
+
+func parseTargetEntry(e parsedEntry) (Target, error) {
+	val := e.Value
+	if val == "" {
+		return Target{}, fmt.Errorf("empty target")
+	}
+
+	var flags map[string]string
+	if len(e.Flags) > 0 {
+		flags = e.Flags
+	}
+
+	// 1. Bare OS path (starts with / or .)
+	idx := strings.Index(val, ":")
 	if idx == -1 {
-		return OSTarget{Label: "caddy", Path: s}, nil
+		if strings.HasPrefix(val, "/") || strings.HasPrefix(val, ".") {
+			return Target{Label: "caddy", Path: val, Flags: flags}, nil
+		}
+
+		return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance' or '[label:]path'", val)
 	}
 
-	// Windows drive letter check (e.g. C:\... or C:/...)
-	if idx == 1 && len(s) > 2 && (s[2] == '\\' || s[2] == '/') && ((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z')) {
-		return OSTarget{Label: "caddy", Path: s}, nil
+	// 2. Bare Windows drive letter (e.g. C:\... or C:/...)
+	if isWindowsDrive(val) {
+		return Target{Label: "caddy", Path: val, Flags: flags}, nil
 	}
 
-	label := strings.TrimSpace(s[:idx])
-	path := strings.TrimSpace(s[idx+1:])
-	if label == "" {
-		label = "caddy"
+	// 3. Windows drive letter with explicit label prefix (e.g. edge:C:\...)
+	rem := val[idx+1:]
+	if isWindowsDrive(rem) {
+		label := strings.TrimSpace(val[:idx])
+		if label == "" {
+			label = "caddy"
+		}
+
+		return Target{Label: label, Path: rem, Flags: flags}, nil
 	}
 
-	if path == "" {
-		return OSTarget{}, fmt.Errorf("invalid OS target %q: empty path", s)
+	// 4. Split by colons: 2 parts = OS target [label:]path, 3 parts = Incus target label:project:instance
+	parts := strings.Split(val, ":")
+	if len(parts) == 2 {
+		label := strings.TrimSpace(parts[0])
+		path := strings.TrimSpace(parts[1])
+		if label == "" {
+			label = "caddy"
+		}
+
+		if path == "" {
+			return Target{}, fmt.Errorf("invalid OS target %q: empty path", val)
+		}
+
+		if !strings.ContainsAny(path, "/\\") && !strings.HasPrefix(path, ".") {
+			return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance' or '[label:]path'", val)
+		}
+
+		return Target{Label: label, Path: path, Flags: flags}, nil
 	}
 
-	return OSTarget{Label: label, Path: path}, nil
+	if len(parts) == 3 {
+		if parts[0] == "" || parts[1] == "" || parts[2] == "" {
+			return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance'", val)
+		}
+
+		return Target{
+			Label:    parts[0],
+			Project:  parts[1],
+			Instance: parts[2],
+			Flags:    flags,
+		}, nil
+	}
+
+	return Target{}, fmt.Errorf("invalid target %q: expected 'label:project:instance' or '[label:]path'", val)
+}
+
+func isWindowsDrive(s string) bool {
+	return len(s) > 2 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') &&
+		((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z'))
 }
 
 // GlobalTemplate represents a global options block template bound to a target label.
@@ -124,6 +269,9 @@ type parsedEntry struct {
 // parseEntries parses whitespace- or comma-separated entries with optional comma-separated flags.
 func parseEntries(raw string) []parsedEntry {
 	var entries []parsedEntry
+	raw = strings.ReplaceAll(raw, " : ", ":")
+	raw = strings.ReplaceAll(raw, ": ", ":")
+	raw = strings.ReplaceAll(raw, " :", ":")
 	tokens := strings.Fields(raw)
 
 	for _, token := range tokens {

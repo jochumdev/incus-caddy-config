@@ -15,6 +15,21 @@ func TestParseTarget(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Target{Label: "caddy1", Project: "myproj", Instance: "caddy-server"}, target)
 
+	// Valid with flags.
+	targetWithFlags, err := ParseTarget("caddy1:myproj:caddy-server,flag1=val1,flag2=val2")
+	require.NoError(t, err)
+	require.Equal(t, Target{
+		Label:    "caddy1",
+		Project:  "myproj",
+		Instance: "caddy-server",
+		Flags:    map[string]string{"flag1": "val1", "flag2": "val2"},
+	}, targetWithFlags)
+	require.Equal(t, "caddy1:myproj:caddy-server,flag1=val1,flag2=val2", targetWithFlags.String())
+
+	// Multiple targets rejected by single ParseTarget.
+	_, err = ParseTarget("caddy1:p:i1,caddy2:p:i2")
+	require.Error(t, err)
+
 	// 2-part is not supported (requires explicit label:project:instance).
 	_, err = ParseTarget("external:caddy-proxy")
 	require.Error(t, err)
@@ -34,36 +49,92 @@ func TestParseTarget(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseTargets(t *testing.T) {
+	// Comma-separated.
+	targets, err := ParseTargets("t1:p1:i1,t2:p2:i2")
+	require.NoError(t, err)
+	require.Equal(t, []Target{
+		{Label: "t1", Project: "p1", Instance: "i1"},
+		{Label: "t2", Project: "p2", Instance: "i2"},
+	}, targets)
+
+	// Space-separated.
+	targets, err = ParseTargets("t1:p1:i1 t2:p2:i2")
+	require.NoError(t, err)
+	require.Equal(t, []Target{
+		{Label: "t1", Project: "p1", Instance: "i1"},
+		{Label: "t2", Project: "p2", Instance: "i2"},
+	}, targets)
+
+	// Comma-separated with flags.
+	targets, err = ParseTargets("t1:p1:i1,flag1=val1,t2:p2:i2,flag2=val2")
+	require.NoError(t, err)
+	require.Equal(t, []Target{
+		{Label: "t1", Project: "p1", Instance: "i1", Flags: map[string]string{"flag1": "val1"}},
+		{Label: "t2", Project: "p2", Instance: "i2", Flags: map[string]string{"flag2": "val2"}},
+	}, targets)
+
+	// Space-separated with flags.
+	targets, err = ParseTargets("t1:p1:i1,flag1=val1 t2:p2:i2,flag2=val2")
+	require.NoError(t, err)
+	require.Equal(t, []Target{
+		{Label: "t1", Project: "p1", Instance: "i1", Flags: map[string]string{"flag1": "val1"}},
+		{Label: "t2", Project: "p2", Instance: "i2", Flags: map[string]string{"flag2": "val2"}},
+	}, targets)
+
+	// Empty string.
+	_, err = ParseTargets("")
+	require.Error(t, err)
+
+	// Whitespace only.
+	_, err = ParseTargets("   ")
+	require.Error(t, err)
+}
+
 func TestParseOSTarget(t *testing.T) {
 	// Bare path defaults to label "caddy".
 	target, err := ParseOSTarget("/etc/caddy/Caddyfile")
 	require.NoError(t, err)
-	require.Equal(t, OSTarget{Label: "caddy", Path: "/etc/caddy/Caddyfile"}, target)
+	require.Equal(t, Target{Label: "caddy", Path: "/etc/caddy/Caddyfile"}, target)
 
 	// Explicit label prefix.
 	target, err = ParseOSTarget("edge:/etc/caddy/Caddyfile")
 	require.NoError(t, err)
-	require.Equal(t, OSTarget{Label: "edge", Path: "/etc/caddy/Caddyfile"}, target)
+	require.Equal(t, Target{Label: "edge", Path: "/etc/caddy/Caddyfile"}, target)
 
 	// Whitespace trimming.
 	target, err = ParseOSTarget("  myedge : /var/caddy/Caddyfile  ")
 	require.NoError(t, err)
-	require.Equal(t, OSTarget{Label: "myedge", Path: "/var/caddy/Caddyfile"}, target)
+	require.Equal(t, Target{Label: "myedge", Path: "/var/caddy/Caddyfile"}, target)
 
 	// Windows drive letter without label prefix.
 	target, err = ParseOSTarget(`C:\caddy\Caddyfile`)
 	require.NoError(t, err)
-	require.Equal(t, OSTarget{Label: "caddy", Path: `C:\caddy\Caddyfile`}, target)
+	require.Equal(t, Target{Label: "caddy", Path: `C:\caddy\Caddyfile`}, target)
 
 	// Windows drive letter with forward slash.
 	target, err = ParseOSTarget("D:/caddy/Caddyfile")
 	require.NoError(t, err)
-	require.Equal(t, OSTarget{Label: "caddy", Path: "D:/caddy/Caddyfile"}, target)
+	require.Equal(t, Target{Label: "caddy", Path: "D:/caddy/Caddyfile"}, target)
 
 	// Windows drive letter with explicit label prefix.
 	target, err = ParseOSTarget(`edge:C:\caddy\Caddyfile`)
 	require.NoError(t, err)
-	require.Equal(t, OSTarget{Label: "edge", Path: `C:\caddy\Caddyfile`}, target)
+	require.Equal(t, Target{Label: "edge", Path: `C:\caddy\Caddyfile`}, target)
+
+	// Valid with flags.
+	targetWithFlags, err := ParseOSTarget("edge:/etc/caddy/Caddyfile,reload=custom")
+	require.NoError(t, err)
+	require.Equal(t, Target{
+		Label: "edge",
+		Path:  "/etc/caddy/Caddyfile",
+		Flags: map[string]string{"reload": "custom"},
+	}, targetWithFlags)
+	require.Equal(t, "edge:/etc/caddy/Caddyfile,reload=custom", targetWithFlags.String())
+
+	// Multiple targets rejected by single ParseOSTarget.
+	_, err = ParseOSTarget("edge:/etc/caddy/Caddyfile,custom:/var/caddy/Caddyfile")
+	require.Error(t, err)
 
 	// Invalid empty target.
 	_, err = ParseOSTarget("")
@@ -77,6 +148,36 @@ func TestParseOSTarget(t *testing.T) {
 	require.Error(t, err)
 
 	_, err = ParseOSTarget(":")
+	require.Error(t, err)
+}
+
+func TestParseOSTargets(t *testing.T) {
+	// Comma-separated.
+	targets, err := ParseOSTargets("/etc/caddy/Caddyfile,edge:/var/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, []Target{
+		{Label: "caddy", Path: "/etc/caddy/Caddyfile"},
+		{Label: "edge", Path: "/var/caddy/Caddyfile"},
+	}, targets)
+
+	// Space-separated.
+	targets, err = ParseOSTargets("/etc/caddy/Caddyfile edge:/var/caddy/Caddyfile")
+	require.NoError(t, err)
+	require.Equal(t, []Target{
+		{Label: "caddy", Path: "/etc/caddy/Caddyfile"},
+		{Label: "edge", Path: "/var/caddy/Caddyfile"},
+	}, targets)
+
+	// With flags.
+	targets, err = ParseOSTargets("caddy:/etc/caddy,flag1=1 edge:/var/caddy,flag2=2")
+	require.NoError(t, err)
+	require.Equal(t, []Target{
+		{Label: "caddy", Path: "/etc/caddy", Flags: map[string]string{"flag1": "1"}},
+		{Label: "edge", Path: "/var/caddy", Flags: map[string]string{"flag2": "2"}},
+	}, targets)
+
+	// Empty.
+	_, err = ParseOSTargets("")
 	require.Error(t, err)
 }
 

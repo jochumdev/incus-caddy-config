@@ -33,8 +33,8 @@ Every flag maps to exactly **one canonical environment variable** prefixed with 
 | `--remote` | `INCUS_REMOTE` | | Connect using an existing remote from Incus CLI configuration. |
 | `--use-remote` | `INCUS_CADDY_USE_REMOTE` | `false` | Allow Incus CLI configuration files (`~/.config/incus`) to be used. |
 | `--project` | `INCUS_CADDY_PROJECTS` | | Monitored Incus project(s). Can be repeated. If empty, monitors all visible projects. |
-| `--caddy-instance` | `INCUS_CADDY_INSTANCES` | | Target Caddy server specification in `label:project:instance` format (repeatable). |
-| `--os-path` | `INCUS_CADDY_OS_PATH` | | Target local Caddyfile in `[label:]path` format (repeatable). Defaults label to `caddy`. |
+| `--caddy-instance` | `INCUS_CADDY_INSTANCES` | | Target Caddy server specification in `label:project:instance[,flags...]` format (repeatable or comma/space-separated). |
+| `--os-path` | `INCUS_CADDY_OS_PATH` | | Target local Caddyfile in `[label:]path[,flags...]` format (repeatable or comma/space-separated). Defaults label to `caddy`. |
 | `--caddyfile-path` | `INCUS_CADDY_CADDYFILE_PATH` | `/config/Caddyfile` | Path to the active Caddyfile inside the Caddy container. |
 | `--templates-dir` | `INCUS_CADDY_TEMPLATES_DIR` | | Local path to directory containing custom vhost templates. |
 | `--global-template` | `INCUS_CADDY_GLOBAL_TEMPLATE` | | Path to custom global Caddyfile template or inline template in `label:path-or-template` format (repeatable). |
@@ -85,6 +85,22 @@ In this mode:
 - Staging writes to `.<base>.tmp` and atomically swaps using `os.Rename`.
 - Configuration syntax is validated locally via `caddy validate --config <staging> --adapter caddyfile`.
 - Caddy is reloaded locally via `caddy reload --config <path> --adapter caddyfile`. If Caddy is not currently running, the validated file remains on disk for Caddy to use upon startup.
+
+### 3. Target Syntax & Options
+
+Both `--caddy-instance` and `--os-path` support:
+
+- **Repetition & Separation**: Targets can be passed across repeated flags, or comma- or whitespace-separated in a single flag or environment variable (`INCUS_CADDY_INSTANCES`, `INCUS_CADDY_OS_PATH`).
+- **Target Options / Flags**: Comma-separated `key=value` pairs appended to any target specification.
+
+```bash
+# Comma-separated instances with options
+caddy-config run \
+  --caddy-instance "public:default:caddy-prod,internal:infra:caddy-dev,flag1=val"
+
+# OS targets via environment variable
+INCUS_CADDY_OS_PATH="/etc/caddy/Caddyfile,edge:/var/caddy/Caddyfile,reload=custom" caddy-config run
+```
 
 ---
 

@@ -305,7 +305,7 @@ func TestPluginHasTargetLabels(t *testing.T) {
 
 	// Match via OSTargets.
 	pOS := New(nil, Config{
-		OSTargets: []OSTarget{
+		OSTargets: []Target{
 			{Label: "local", Path: "/etc/caddy/Caddyfile"},
 		},
 	})
@@ -328,7 +328,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	p := New(logger, Config{
-		OSTargets: []OSTarget{
+		OSTargets: []Target{
 			{Label: "edge", Path: targetPath},
 		},
 	})
@@ -352,7 +352,7 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	// Reconcile with broken template: handles error gracefully.
 	brokenPath := filepath.Join(tmpDir, "BrokenCaddyfile")
 	pBroken := New(logger, Config{
-		OSTargets: []OSTarget{
+		OSTargets: []Target{
 			{Label: "bad", Path: brokenPath},
 		},
 	})
@@ -381,7 +381,7 @@ func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	p := New(logger, Config{
-		OSTargets: []OSTarget{
+		OSTargets: []Target{
 			{Label: "caddy-external", Path: pathExt},
 			{Label: "caddy-internal", Path: pathInt},
 		},

@@ -69,8 +69,11 @@ func TestRunCommandFlags(t *testing.T) {
 	require.Equal(t, "/tmp/key.pem", cfg.ClientKey)
 	require.True(t, cfg.Restricted)
 	require.Equal(t, []string{"alpha", "beta"}, cfg.Projects)
-	require.Equal(t, []string{"external:default:caddy-prod"}, cfg.CaddyInstances)
-	require.Equal(t, []string{"/etc/caddy/Caddyfile", "edge:/var/caddy/Caddyfile"}, cfg.OSTargets)
+	require.Equal(t, []caddy.Target{{Label: "external", Project: "default", Instance: "caddy-prod"}}, cfg.Targets)
+	require.Equal(t, []caddy.Target{
+		{Label: "caddy", Path: "/etc/caddy/Caddyfile"},
+		{Label: "edge", Path: "/var/caddy/Caddyfile"},
+	}, cfg.OSTargets)
 	require.Equal(t, "/etc/caddy/Caddyfile", cfg.CaddyfilePath)
 	require.Equal(t, "/etc/caddy/templates", cfg.TemplatesDir)
 	require.Equal(t, []string{"caddy:/etc/caddy/templates/global.caddyfile", "edge:/etc/caddy/templates/edge.global.caddyfile"}, cfg.GlobalTemplates)

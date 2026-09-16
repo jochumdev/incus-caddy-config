@@ -25,7 +25,7 @@ func TestDeployOSSuccess(t *testing.T) {
 	}
 
 	content := []byte(":80 {\n\trespond \"ok\"\n}\n")
-	err := deployOS(context.Background(), logger, OSTarget{Label: "caddy", Path: targetPath}, content)
+	err := deployOS(context.Background(), logger, Target{Label: "caddy", Path: targetPath}, content)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(targetPath)
@@ -50,7 +50,7 @@ func TestDeployOSValidateFailure(t *testing.T) {
 	}
 
 	content := []byte("invalid content")
-	err := deployOS(context.Background(), logger, OSTarget{Label: "caddy", Path: targetPath}, content)
+	err := deployOS(context.Background(), logger, Target{Label: "caddy", Path: targetPath}, content)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "caddy validate failed")
 
@@ -81,7 +81,7 @@ func TestDeployOSReloadFailureDaemonOffline(t *testing.T) {
 	}
 
 	content := []byte(":80 {\n\trespond \"offline\"\n}\n")
-	err := deployOS(context.Background(), logger, OSTarget{Label: "edge", Path: targetPath}, content)
+	err := deployOS(context.Background(), logger, Target{Label: "edge", Path: targetPath}, content)
 	require.NoError(t, err)
 
 	// File should be written for next boot even if daemon wasn't running.
@@ -98,7 +98,7 @@ func TestDeployOSDirectoryCreationFailure(t *testing.T) {
 	targetPath := filepath.Join(tmpFile, "cannot-create", "Caddyfile")
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	err = deployOS(context.Background(), logger, OSTarget{Label: "caddy", Path: targetPath}, []byte("test"))
+	err = deployOS(context.Background(), logger, Target{Label: "caddy", Path: targetPath}, []byte("test"))
 	require.Error(t, err)
 	require.ErrorContains(t, err, "creating directory")
 }
