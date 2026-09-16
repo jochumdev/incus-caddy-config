@@ -61,12 +61,13 @@ For a target bound to prefix `edge`:
 
 | Label | Description | Example |
 |---|---|---|
-| `user.label.edge.domain` | **(Required)** Domain name(s) to match. Multiple domains are separated by spaces. | `api.example.com` or `app.lan web.lan` |
+| `user.label.edge.domain` | **(Required)** Domain name(s) to match, with optional flags (e.g. `example.com,flag1=value1`). Multiple domains are separated by spaces. | `api.example.com` or `app.lan web.lan` |
 | `user.label.edge.upstream` | Target port or `host:port` override. If omitted, routes to container IP on default HTTP port. | `8080`, `3000`, or `10.0.1.50:9090` |
 | `user.label.edge.network` | Incus network interface name to resolve IPv4 from. Defaults to the first valid non-loopback IPv4 address. | `incusbr0`, `eth0`, or `internal` |
-| `user.label.edge.redirect` | Target URL for permanent redirects (renders `redir <url> permanent`). | `https://example.com{uri}` |
+| `user.label.edge.redirect` | Target URL for permanent redirects (renders `redir <url> permanent`). Defaults to appending `{uri}` unless `,no-uri` is specified. | `https://example.com` or `https://example.com,no-uri` |
+| `user.label.edge.redirs` | Plain redirection domain(s) mapping to primary domain. Options: `,uri` (default) or `,no-uri`. | `www.example.com,no-uri old.example.com,uri` |
 | `user.label.edge.template` | Custom vhost template name in `--templates-dir` or an inline Go template. | `php_site` or inline site block |
-| `user.label.edge.service` | Custom service name override (defaults to `user.label.incus-compose.service`). | `payments-api` |
+| `user.label.edge.service` | Custom service name override (defaults to `user.incus-compose.service`). Groups instance replicas together. | `payments-api` |
 
 ---
 
@@ -176,7 +177,40 @@ old.example.com {
 }
 ```
 
-### 5. Multi-Network Instance (Specific Network)
+### 5. Plain Redirections (`<label>.redirs`)
+
+To redirect alternate or legacy domains (such as `www.` or alias domains) to the primary domain without running separate containers:
+
+```yaml
+services:
+  web:
+    image: docker.io/library/nginx:alpine
+    labels:
+      edge.domain: "example.com"
+      edge.upstream: "80"
+      edge.redirs: "www.example.com,uri old.example.com,no-uri"
+```
+
+Rendered Caddyfile:
+```caddyfile
+example.com {
+	reverse_proxy 10.0.1.15:80
+}
+
+old.example.com {
+	redir https://example.com permanent
+}
+
+www.example.com {
+	redir https://example.com{uri} permanent
+}
+```
+
+Flag options per domain:
+- `uri` (default if omitted): preserves the request path and query (`redir https://example.com{uri} permanent`).
+- `no-uri`: drops the request path and redirects to root (`redir https://example.com permanent`).
+
+### 6. Multi-Network Instance (Specific Network)
 
 If an instance is connected to both a private management network (`mgmt`) and an internal service bridge (`appbr0`), explicitly pick the interface for reverse proxying:
 
@@ -189,3 +223,4 @@ services:
       edge.upstream: "8000"
       edge.network: "appbr0"
 ```
+

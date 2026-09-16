@@ -189,7 +189,7 @@ For a target bound to prefix `edge` (`--caddy-instance edge:default:caddy` or `-
 | `edge.network`          | Network interface to resolve IPv4 from (e.g. `incusbr0`). Defaults to first non-loopback IPv4. |
 | `edge.redirect`         | Target URL for permanent redirects (e.g. `https://example.com{uri}`).                          |
 | `edge.template`         | Custom vhost template name or inline template string for full site blocks.                     |
-| `edge.service`          | Custom service name override (defaults to `user.label.incus-compose.service`).                 |
+| `edge.service`          | Custom service name override (defaults to `user.incus-compose.service`).                       |
 
 ---
 

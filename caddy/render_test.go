@@ -247,3 +247,36 @@ func TestRendererMissingGlobalTemplateFile(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "reading global template file")
 }
+
+func TestRendererCustomTemplateWithFlags(t *testing.T) {
+	customTmpl := `{{ .Domain }} {
+{{- if eq .Flags.tls "internal" }}
+	tls internal
+{{- end }}
+{{- if .Flags.hsts }}
+	header Strict-Transport-Security "max-age=31536000"
+{{- end }}
+	reverse_proxy {{ index .Upstreams 0 }}
+}`
+
+	vhosts := []vhost{
+		{
+			Domain:    "secure.example.com",
+			Upstreams: []string{"10.0.1.10:8443"},
+			Template:  customTmpl,
+			Flags: map[string]string{
+				"tls":  "internal",
+				"hsts": "true",
+			},
+		},
+	}
+
+	content, err := render(vhosts, "", "")
+	require.NoError(t, err)
+
+	out := string(content)
+	require.Contains(t, out, "secure.example.com {")
+	require.Contains(t, out, "tls internal")
+	require.Contains(t, out, `header Strict-Transport-Security "max-age=31536000"`)
+	require.Contains(t, out, "reverse_proxy 10.0.1.10:8443")
+}

@@ -104,9 +104,11 @@ Inside your custom template, the following fields are available:
 | Variable | Type | Description |
 |---|---|---|
 | `.Domain` | `string` | The domain(s) defined on the instance (`user.label.<prefix>.domain`). |
+| `.Service` | `string` | The service name if defined (`user.label.<prefix>.service` or `user.incus-compose.service`). |
 | `.Upstreams` | `[]string` | Sorted list of resolved upstream addresses (e.g. `["10.0.1.5:8080", "10.0.1.6:8080"]`). |
 | `.Redirect` | `string` | The redirect URL if configured (`user.label.<prefix>.redirect`). |
 | `.Template` | `string` | The raw template name or inline template string. |
+| `.Flags` | `map[string]string` | Custom flags parsed from label definitions (e.g. `example.com,flag1=value1`). |
 
 ---
 
