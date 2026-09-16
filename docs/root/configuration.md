@@ -37,7 +37,6 @@ Every flag maps to exactly **one canonical environment variable** prefixed with 
 | `--os-path` | `INCUS_CADDY_OS_PATH` | | Target local Caddyfile in `[label:]path[,flags...]` format (repeatable or comma/space-separated). Defaults label to `caddy`. |
 | `--caddyfile-path` | `INCUS_CADDY_CADDYFILE_PATH` | `/config/Caddyfile` | Path to the active Caddyfile inside the Caddy container. |
 | `--templates-dir` | `INCUS_CADDY_TEMPLATES_DIR` | | Local path to directory containing custom vhost templates. |
-| `--global-template` | `INCUS_CADDY_GLOBAL_TEMPLATE` | | Path to custom global Caddyfile template or inline template in `label:path-or-template` format (repeatable). |
 | `--debounce-window` | `INCUS_CADDY_DEBOUNCE_WINDOW` | `250ms` | Quiet period before flushing burst events to avoid redundant reloads. |
 | `--http-address` | `INCUS_CADDY_HTTP_ADDRESS` | `:9153` | Listening address for `/health` and `/ready` endpoints. Empty disables HTTP server. |
 | `--exclude` | `INCUS_CADDY_EXCLUDE` | | Optional chain stage to exclude (e.g. `http` or `debounce`). Repeatable. |
@@ -91,15 +90,15 @@ In this mode:
 Both `--caddy-instance` and `--os-path` support:
 
 - **Repetition & Separation**: Targets can be passed across repeated flags, or comma- or whitespace-separated in a single flag or environment variable (`INCUS_CADDY_INSTANCES`, `INCUS_CADDY_OS_PATH`).
-- **Target Options / Flags**: Comma-separated `key=value` pairs appended to any target specification.
+- **Target Options / Flags**: Comma-separated `key=value` pairs appended to any target specification, such as `global_template=<path>` or `reload=<cmd>`.
 
 ```bash
 # Comma-separated instances with options
 caddy-config run \
-  --caddy-instance "public:default:caddy-prod,internal:infra:caddy-dev,flag1=val"
+  --caddy-instance "public:default:caddy-prod,global_template=/etc/caddy/ext.global,internal:infra:caddy-dev"
 
-# OS targets via environment variable
-INCUS_CADDY_OS_PATH="/etc/caddy/Caddyfile,edge:/var/caddy/Caddyfile,reload=custom" caddy-config run
+# OS targets via environment variable with custom global template
+INCUS_CADDY_OS_PATH="/etc/caddy/Caddyfile,global_template=/etc/caddy/global.caddyfile" caddy-config run
 ```
 
 ---

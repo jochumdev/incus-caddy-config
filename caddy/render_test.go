@@ -170,62 +170,21 @@ func TestRendererTemplateExtensions(t *testing.T) {
 	require.Contains(t, out, "exact.example.com { exact_match }")
 }
 
-func TestRendererCustomGlobalInlineTemplate(t *testing.T) {
-	globalTmpl := `{
-	admin localhost:2019
-	email admin@example.com
-}`
-	vhosts := []vhost{
-		{
-			Domain:    "app.example.com",
-			Upstreams: []string{"10.0.1.5:8080"},
-		},
-	}
-
-	content, err := render(vhosts, "", globalTmpl)
-	require.NoError(t, err)
-
-	out := string(content)
-	require.Contains(t, out, "email admin@example.com")
-	require.Contains(t, out, "admin localhost:2019")
-	require.Contains(t, out, "app.example.com {")
-}
-
-func TestRendererCustomGlobalTemplateFile(t *testing.T) {
+func TestRendererGlobalTemplateWithVhostsContext(t *testing.T) {
 	tmpDir := t.TempDir()
-	globalFile := filepath.Join(tmpDir, "my_global.caddyfile")
+	globalFile := filepath.Join(tmpDir, "vhosts_global.caddyfile")
 	err := os.WriteFile(globalFile, []byte(`{
 	admin localhost:2019
-	auto_https off
+	# Total vhosts: {{ len .Vhosts }}
 }`), 0600)
 	require.NoError(t, err)
 
-	vhosts := []vhost{
-		{
-			Domain:    "app.example.com",
-			Upstreams: []string{"10.0.1.5:8080"},
-		},
-	}
-
-	content, err := render(vhosts, "", globalFile)
-	require.NoError(t, err)
-
-	out := string(content)
-	require.Contains(t, out, "auto_https off")
-	require.Contains(t, out, "app.example.com {")
-}
-
-func TestRendererGlobalTemplateWithVhostsContext(t *testing.T) {
-	globalTmpl := `{
-	admin localhost:2019
-	# Total vhosts: {{ len .Vhosts }}
-}`
 	vhosts := []vhost{
 		{Domain: "a.example.com", Upstreams: []string{"10.0.1.1:80"}},
 		{Domain: "b.example.com", Upstreams: []string{"10.0.1.2:80"}},
 	}
 
-	content, err := render(vhosts, "", globalTmpl)
+	content, err := render(vhosts, "", globalFile)
 	require.NoError(t, err)
 
 	out := string(content)
@@ -233,11 +192,16 @@ func TestRendererGlobalTemplateWithVhostsContext(t *testing.T) {
 }
 
 func TestRendererInvalidGlobalTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	globalFile := filepath.Join(tmpDir, "invalid_global.caddyfile")
+	err := os.WriteFile(globalFile, []byte("{{ unclosed"), 0600)
+	require.NoError(t, err)
+
 	vhosts := []vhost{{Domain: "app.example.com"}}
 
-	_, err := render(vhosts, "", "{{ unclosed")
+	_, err = render(vhosts, "", globalFile)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "loading global template")
+	require.Contains(t, err.Error(), "parsing global template file")
 }
 
 func TestRendererMissingGlobalTemplateFile(t *testing.T) {

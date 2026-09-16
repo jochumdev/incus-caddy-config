@@ -1,7 +1,7 @@
 # incus-caddy-config
 
 [![CI](https://github.com/lxc/incus-caddy-config/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/lxc/incus-caddy-config/actions)
-[![Coverage 91%](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/lxc/incus-caddy-config/actions)
+[![Coverage 90%](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/lxc/incus-caddy-config/actions)
 [![License Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 Dynamic, zero-touch reverse proxy configuration for [Caddy](https://caddyserver.com/) on [Incus](https://linuxcontainers.org/incus/), driven by instance events via `ievent`.
@@ -79,7 +79,7 @@ flowchart TD
 - **Single Goroutine Concurrency**: Concurrency model strictly confined to a single goroutine (Rule A4). Zero mutexes, race-free event processing, and orderly reconciliation.
 - **Warm Gating**: Reconciliations are suppressed while the event chain is cold (`ChainCold`). Deployments only trigger after the initial fleet sweep completes (`ChainWarm`), eliminating route churn during daemon reconnects.
 - **Automatic Load Balancing**: Multiple instances sharing the same domain label are automatically aggregated and sorted into a single load-balanced `reverse_proxy` directive.
-- **Custom Vhost & Global Templating**: Supports custom site blocks via external template directories (`--templates-dir`) and overriding the global options block per target label via inline Go templates or file paths (`--global-template`).
+- **Custom Vhost & Global Templating**: Supports custom site blocks via external template directories (`--templates-dir`) and overriding the global options block per target via custom template files (`global_template=<path>`).
 - **Observability**: Built-in HTTP endpoints on `:9153` for liveness (`/health`), fleet readiness (`/ready`), and Go runtime profiling (`/debug/pprof`).
 
 ---

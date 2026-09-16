@@ -52,23 +52,6 @@ func TestConfigValidate(t *testing.T) {
 	require.Equal(t, "infra", args.Targets[1].Project)
 	require.Equal(t, "caddy-dev", args.Targets[1].Instance)
 	require.Len(t, args.OSTargets, 2)
-
-	// Custom global templates with prefix and duplicate overwrite (last one wins).
-	cfg.GlobalTemplates = []string{
-		"caddy-external:/etc/caddy/ext.caddyfile",
-		"internal:{ admin localhost:2019 }",
-		"caddy-external:/etc/caddy/override.caddyfile",
-	}
-	args, err = cfg.validate()
-	require.NoError(t, err)
-	require.Len(t, args.GlobalTemplates, 2)
-	require.Equal(t, "/etc/caddy/override.caddyfile", args.GlobalTemplates["caddy-external"])
-	require.Equal(t, "{ admin localhost:2019 }", args.GlobalTemplates["internal"])
-
-	// Missing prefix must error.
-	cfg.GlobalTemplates = []string{"/etc/caddy/bare.caddyfile"}
-	_, err = cfg.validate()
-	require.Error(t, err)
 }
 
 func TestConfigEndpoint(t *testing.T) {

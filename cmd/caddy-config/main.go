@@ -139,12 +139,6 @@ func runCommand(cfg *config) *cli.Command {
 				Destination: &cfg.TemplatesDir,
 				Sources:     cli.EnvVars("INCUS_CADDY_TEMPLATES_DIR"),
 			},
-			&cli.StringSliceFlag{
-				Name:        "global-template",
-				Usage:       "Global Caddyfile template in format 'label:path-or-template'; can be repeated",
-				Destination: &cfg.GlobalTemplates,
-				Sources:     cli.EnvVars("INCUS_CADDY_GLOBAL_TEMPLATE"),
-			},
 			&cli.DurationFlag{
 				Name:        "debounce-window",
 				Usage:       "How long a key must be quiet before the last of its burst is handed on",
@@ -260,7 +254,6 @@ func mainAction(ctx context.Context, args *mainActionArgs) error {
 		"secrets_dir", args.SecretsDir,
 		"token", args.redactedToken(),
 		"templates_dir", args.TemplatesDir,
-		"global_templates", args.GlobalTemplates,
 		"debounce_window", args.DebounceWindow,
 		"workers", args.Workers,
 		"read_timeout", args.ReadTimeout,

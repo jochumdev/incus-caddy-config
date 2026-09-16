@@ -23,6 +23,15 @@ func (t Target) IsOS() bool {
 	return t.Path != ""
 }
 
+// GlobalTemplate returns the custom global template file path from target flags, if configured.
+func (t Target) GlobalTemplate() string {
+	if tmpl, ok := t.Flags["global_template"]; ok {
+		return tmpl
+	}
+
+	return t.Flags["global-template"]
+}
+
 // String returns the string representation of Target,
 // including comma-separated flags if present.
 func (t Target) String() string {
@@ -209,44 +218,6 @@ func parseTargetEntry(e parsedEntry) (Target, error) {
 func isWindowsDrive(s string) bool {
 	return len(s) > 2 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') &&
 		((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z'))
-}
-
-// GlobalTemplate represents a global options block template bound to a target label.
-type GlobalTemplate struct {
-	Label    string
-	Template string
-}
-
-// ParseGlobalTemplate parses a "label:template" specification.
-func ParseGlobalTemplate(s string) (GlobalTemplate, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return GlobalTemplate{}, fmt.Errorf("empty global template")
-	}
-
-	idx := strings.Index(s, ":")
-	if idx == -1 {
-		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
-	}
-
-	// Reject bare Windows drive letter without label (e.g. C:\... or C:/...)
-	if idx == 1 && len(s) > 2 && (s[2] == '\\' || s[2] == '/') && ((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z')) {
-		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
-	}
-
-	// Reject inline template block without label prefix
-	braceIdx := strings.Index(s, "{")
-	if braceIdx != -1 && braceIdx < idx {
-		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
-	}
-
-	label := strings.TrimSpace(s[:idx])
-	tmpl := strings.TrimSpace(s[idx+1:])
-	if label == "" || tmpl == "" {
-		return GlobalTemplate{}, fmt.Errorf("invalid global template %q: expected 'label:template'", s)
-	}
-
-	return GlobalTemplate{Label: label, Template: tmpl}, nil
 }
 
 // vhost holds the model data needed to render a Caddyfile site block.

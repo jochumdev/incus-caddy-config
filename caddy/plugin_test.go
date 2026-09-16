@@ -378,16 +378,27 @@ func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
 	tmpDir := t.TempDir()
 	pathExt := filepath.Join(tmpDir, "external.Caddyfile")
 	pathInt := filepath.Join(tmpDir, "internal.Caddyfile")
+	tmplExtFile := filepath.Join(tmpDir, "external_global.caddyfile")
+	tmplIntFile := filepath.Join(tmpDir, "internal_global.caddyfile")
+	err := os.WriteFile(tmplExtFile, []byte("{\n\tadmin localhost:2019\n\t# external-global-header\n}"), 0600)
+	require.NoError(t, err)
+	err = os.WriteFile(tmplIntFile, []byte("{\n\tadmin localhost:2019\n\t# internal-global-header\n}"), 0600)
+	require.NoError(t, err)
+
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	p := New(logger, Config{
 		OSTargets: []Target{
-			{Label: "caddy-external", Path: pathExt},
-			{Label: "caddy-internal", Path: pathInt},
-		},
-		GlobalTemplates: map[string]string{
-			"caddy-external": "{\n\tadmin localhost:2019\n\t# external-global-header\n}",
-			"caddy-internal": "{\n\tadmin localhost:2019\n\t# internal-global-header\n}",
+			{
+				Label: "caddy-external",
+				Path:  pathExt,
+				Flags: map[string]string{"global_template": tmplExtFile},
+			},
+			{
+				Label: "caddy-internal",
+				Path:  pathInt,
+				Flags: map[string]string{"global_template": tmplIntFile},
+			},
 		},
 	})
 

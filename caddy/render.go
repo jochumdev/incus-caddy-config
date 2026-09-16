@@ -89,25 +89,16 @@ func render(vhosts []vhost, templatesDir, globalTemplate string) ([]byte, error)
 	return buf.Bytes(), nil
 }
 
-// loadGlobalTemplate loads a custom global template from a file or inline string.
-func loadGlobalTemplate(globalTemplate string) (*template.Template, error) {
-	content, err := os.ReadFile(globalTemplate)
-	if err == nil {
-		tmpl, err := template.New(filepath.Base(globalTemplate)).Parse(string(content))
-		if err != nil {
-			return nil, fmt.Errorf("parsing global template file %q: %w", globalTemplate, err)
-		}
-
-		return tmpl, nil
-	}
-
-	if !os.IsNotExist(err) || (!strings.Contains(globalTemplate, "\n") && !strings.Contains(globalTemplate, "{") && (filepath.IsAbs(globalTemplate) || strings.HasPrefix(globalTemplate, "."))) {
-		return nil, fmt.Errorf("reading global template file %q: %w", globalTemplate, err)
-	}
-
-	tmpl, err := template.New("inline_global").Parse(globalTemplate)
+// loadGlobalTemplate loads a custom global template from a file.
+func loadGlobalTemplate(globalTemplateFile string) (*template.Template, error) {
+	content, err := os.ReadFile(globalTemplateFile)
 	if err != nil {
-		return nil, fmt.Errorf("parsing inline global template: %w", err)
+		return nil, fmt.Errorf("reading global template file %q: %w", globalTemplateFile, err)
+	}
+
+	tmpl, err := template.New(filepath.Base(globalTemplateFile)).Parse(string(content))
+	if err != nil {
+		return nil, fmt.Errorf("parsing global template file %q: %w", globalTemplateFile, err)
 	}
 
 	return tmpl, nil

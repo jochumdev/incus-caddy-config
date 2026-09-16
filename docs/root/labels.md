@@ -31,8 +31,8 @@ For example:
 # Remote Incus instance
 --caddy-instance edge:default:caddy-prod
 
-# Remote Incus instance with custom flags
---caddy-instance edge:default:caddy-prod,flag1=val1
+# Remote Incus instance with custom flags (e.g. global template)
+--caddy-instance edge:default:caddy-prod,global_template=/etc/caddy/global.caddyfile
 
 # Local OS Caddyfile (defaults to label "caddy")
 --os-path /etc/caddy/Caddyfile

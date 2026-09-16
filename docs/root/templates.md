@@ -45,37 +45,30 @@ By default, `caddy-config` prepends a minimal global options block (`defaultBase
 
 You can overwrite this block to configure global settings such as TLS certificates, global logging, email, acme CA endpoints, or trusted proxies.
 
-### Specifying a Global Template (`--global-template`)
+### Specifying a Global Template (`global_template`)
 
-You specify a custom global template per target route label using `--global-template` (or `INCUS_CADDY_GLOBAL_TEMPLATE`). The flag takes the format `<label>:<path-or-template>` and can be repeated to configure each target label independently:
+You specify a custom global template directly on each target using the `global_template=<path>` option within `--caddy-instance` or `--os-path`:
 
 **As a file path:**
 ```bash
 caddy-config run \
-  --caddy-instance edge:default:caddy \
-  --global-template edge:/etc/caddy/global.caddyfile
+  --caddy-instance edge:default:caddy,global_template=/etc/caddy/global.caddyfile
 ```
 
 **Targeted multi-instance configuration:**
 ```bash
 caddy-config run \
-  --caddy-instance external:default:caddy-external \
-  --caddy-instance internal:default:caddy-internal \
-  --global-template external:/etc/caddy/external.global.caddyfile \
-  --global-template internal:/etc/caddy/internal.global.caddyfile
+  --caddy-instance external:default:caddy-external,global_template=/etc/caddy/external.global.caddyfile \
+  --caddy-instance internal:default:caddy-internal,global_template=/etc/caddy/internal.global.caddyfile
 ```
 
-**As an inline template string:**
+**Co-located OS deployment:**
 ```bash
 caddy-config run \
-  --caddy-instance edge:default:caddy \
-  --global-template 'edge:{
-	admin localhost:2019
-	email admin@example.com
-}'
+  --os-path edge:/etc/caddy/Caddyfile,global_template=/etc/caddy/global.caddyfile
 ```
 
-Any deployment target whose label does not have an explicit `--global-template` specified uses the default minimal options block (`{ admin localhost:2019 }`).
+Any deployment target that does not configure `global_template` uses the default minimal options block (`{ admin localhost:2019 }`).
 
 ### Global Template Context Variables
 

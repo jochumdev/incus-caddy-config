@@ -36,9 +36,8 @@ type config struct {
 	Targets   []caddy.Target
 	OSTargets []caddy.Target
 
-	CaddyfilePath   string
-	TemplatesDir    string
-	GlobalTemplates []string
+	CaddyfilePath string
+	TemplatesDir  string
 
 	DebounceWindow time.Duration
 	HTTPAddr       string
@@ -67,9 +66,8 @@ type mainActionArgs struct {
 	Targets   []caddy.Target
 	OSTargets []caddy.Target
 
-	CaddyfilePath   string
-	TemplatesDir    string
-	GlobalTemplates map[string]string
+	CaddyfilePath string
+	TemplatesDir  string
 
 	DebounceWindow time.Duration
 	HTTPAddr       string
@@ -102,41 +100,30 @@ func (c *config) validate() (*mainActionArgs, error) {
 		return nil, errors.New("at least one --caddy-instance or --os-path must be specified")
 	}
 
-	globalTemplates := make(map[string]string)
-	for _, entry := range c.GlobalTemplates {
-		gt, err := caddy.ParseGlobalTemplate(entry)
-		if err != nil {
-			return nil, fmt.Errorf("invalid --global-template %q: %w", entry, err)
-		}
-
-		globalTemplates[gt.Label] = gt.Template
-	}
-
 	return &mainActionArgs{
-		IncusURL:        c.IncusURL,
-		Token:           c.Token,
-		DataDir:         c.DataDir,
-		SecretsDir:      c.SecretsDir,
-		ClientCert:      c.ClientCert,
-		ClientKey:       c.ClientKey,
-		Restricted:      c.Restricted,
-		Remote:          c.Remote,
-		UseRemote:       c.UseRemote,
-		Projects:        c.Projects,
-		Targets:         c.Targets,
-		OSTargets:       c.OSTargets,
-		CaddyfilePath:   c.CaddyfilePath,
-		TemplatesDir:    c.TemplatesDir,
-		GlobalTemplates: globalTemplates,
-		DebounceWindow:  c.DebounceWindow,
-		HTTPAddr:        c.HTTPAddr,
-		Exclude:         c.Exclude,
-		Log:             c.Log,
-		Pprof:           c.Pprof,
-		Workers:         c.Workers,
-		ReadTimeout:     c.ReadTimeout,
-		ProjectDelay:    c.ProjectDelay,
-		ReadDelay:       c.ReadDelay,
+		IncusURL:       c.IncusURL,
+		Token:          c.Token,
+		DataDir:        c.DataDir,
+		SecretsDir:     c.SecretsDir,
+		ClientCert:     c.ClientCert,
+		ClientKey:      c.ClientKey,
+		Restricted:     c.Restricted,
+		Remote:         c.Remote,
+		UseRemote:      c.UseRemote,
+		Projects:       c.Projects,
+		Targets:        c.Targets,
+		OSTargets:      c.OSTargets,
+		CaddyfilePath:  c.CaddyfilePath,
+		TemplatesDir:   c.TemplatesDir,
+		DebounceWindow: c.DebounceWindow,
+		HTTPAddr:       c.HTTPAddr,
+		Exclude:        c.Exclude,
+		Log:            c.Log,
+		Pprof:          c.Pprof,
+		Workers:        c.Workers,
+		ReadTimeout:    c.ReadTimeout,
+		ProjectDelay:   c.ProjectDelay,
+		ReadDelay:      c.ReadDelay,
 	}, nil
 }
 
