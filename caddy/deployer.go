@@ -50,7 +50,7 @@ func reconcileDeployments(
 		instance, _ := target.Flag("instance")
 		targetKey := project + "/" + instance
 
-		vhosts := extractVhosts(target.Label, instances)
+		vhosts := extractVhosts(logger, target.Label, instances)
 
 		globalTmpl, _ := target.Flag("global_template")
 		if globalTmpl == "" {
@@ -101,7 +101,7 @@ func reconcileDeployments(
 		path, _ := target.Flag("path")
 		targetKey := "os:" + target.Label + ":" + path
 
-		vhosts := extractVhosts(target.Label, instances)
+		vhosts := extractVhosts(logger, target.Label, instances)
 
 		globalTmpl, _ := target.Flag("global_template")
 		if globalTmpl == "" {

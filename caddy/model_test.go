@@ -1,6 +1,8 @@
 package caddy
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -219,13 +221,13 @@ func TestExtractVhosts(t *testing.T) {
 	events := []*iutil.Event{ev1, ev2, ev3}
 
 	// Extract for caddy1.
-	vhosts1 := extractVhosts("caddy1", events)
+	vhosts1 := extractVhosts(nil, "caddy1", events)
 	require.Len(t, vhosts1, 1)
 	require.Equal(t, "git.example.com", vhosts1[0].Domain)
 	require.Equal(t, []string{"10.0.1.5:3000", "10.0.1.6:3000"}, vhosts1[0].Upstreams)
 
 	// Extract for caddy2.
-	vhosts2 := extractVhosts("caddy2", events)
+	vhosts2 := extractVhosts(nil, "caddy2", events)
 	require.Len(t, vhosts2, 1)
 	require.Equal(t, "other.lan", vhosts2[0].Domain)
 	require.Equal(t, "https://example.com{uri}", vhosts2[0].Redirect)
@@ -253,7 +255,7 @@ func TestExtractVhostsWithNetworkFlag(t *testing.T) {
 	}, ifaces2, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "api-2", "").WithInstance(inst2, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev1, ev2})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev1, ev2})
 	require.Len(t, vhosts, 1)
 	require.Equal(t, "api.example.com", vhosts[0].Domain)
 	require.Equal(t, []string{"192.168.10.20:8080", "192.168.10.21:8080"}, vhosts[0].Upstreams)
@@ -350,7 +352,7 @@ func TestExtractVhostsEdgeCases(t *testing.T) {
 	evNoIP := iutil.NewEvent(now, "instance-started", "default", "noip", "").WithInstance(instNoIP, true)
 
 	events := []*iutil.Event{evNil, evStopped, evNoDomain, evWhitespaceDomain, evHostPort, evBareIP, evNoIP}
-	vhosts := extractVhosts("caddy", events)
+	vhosts := extractVhosts(nil, "caddy", events)
 
 	require.Len(t, vhosts, 3)
 
@@ -392,7 +394,7 @@ func TestExtractVhostsMerging(t *testing.T) {
 	}, ifaces1, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "inst-3", "").WithInstance(inst3, true)
 
-	vhosts := extractVhosts("caddy", []*iutil.Event{ev1, ev2, ev3})
+	vhosts := extractVhosts(nil, "caddy", []*iutil.Event{ev1, ev2, ev3})
 	require.Len(t, vhosts, 1)
 
 	v := vhosts[0]
@@ -458,7 +460,7 @@ func TestExtractVhostsWithRedirTemplate(t *testing.T) {
 	now := time.Now()
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev})
 	require.Len(t, vhosts, 3)
 
 	// Primary domain
@@ -487,7 +489,7 @@ func TestExtractVhostsWithRedirs(t *testing.T) {
 	now := time.Now()
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev})
 	require.Len(t, vhosts, 4)
 
 	// 1. Primary domain vhost
@@ -532,7 +534,7 @@ func TestExtractVhostsRedirsDeduplicationAndSelfFilter(t *testing.T) {
 	}, ifaces2, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "web-2", "").WithInstance(inst2, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev1, ev2})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev1, ev2})
 	require.Len(t, vhosts, 2)
 
 	require.Equal(t, "example.com", vhosts[0].Domain)
@@ -551,7 +553,7 @@ func TestExtractVhostsRedirsWithExplicitRedirect(t *testing.T) {
 	now := time.Now()
 	ev := iutil.NewEvent(now, "instance-started", "default", "redir-1", "").WithInstance(inst, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev})
 	require.Len(t, vhosts, 2)
 
 	require.Equal(t, "old.com", vhosts[0].Domain)
@@ -667,7 +669,7 @@ func TestExtractVhostsFlagsAndDomainModifiers(t *testing.T) {
 	}, nil, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "redir-2", "").WithInstance(inst3, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev1, ev2, ev3})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev1, ev2, ev3})
 	require.Len(t, vhosts, 3)
 
 	// 1. example.com
@@ -695,7 +697,7 @@ func TestExtractVhostsFlagsAndDomainModifiers(t *testing.T) {
 	}, ifaces, nil)
 	ev4 := iutil.NewEvent(now, "instance-started", "default", "registry-1", "").WithInstance(inst4, true)
 
-	vhostsWithQuotes := extractVhosts("edge", []*iutil.Event{ev4})
+	vhostsWithQuotes := extractVhosts(nil, "edge", []*iutil.Event{ev4})
 	require.Len(t, vhostsWithQuotes, 1)
 	require.Equal(t, "docker-registry.home.jochum.dev", vhostsWithQuotes[0].Domain)
 	require.Equal(t, "1.1.1.1 1.0.0.1", vhostsWithQuotes[0].Flags["resolvers"])
@@ -733,7 +735,7 @@ func TestExtractVhostsCollectReplicasByService(t *testing.T) {
 	}, ifaces3, nil)
 	ev3 := iutil.NewEvent(now, "instance-started", "default", "api-3", "").WithInstance(inst3, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev1, ev2, ev3})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev1, ev2, ev3})
 	require.Len(t, vhosts, 1)
 
 	require.Equal(t, "api.example.com", vhosts[0].Domain)
@@ -764,10 +766,222 @@ func TestExtractVhostsServicePrefixOverride(t *testing.T) {
 	}, ifaces2, nil)
 	ev2 := iutil.NewEvent(now, "instance-started", "default", "srv-2", "").WithInstance(inst2, true)
 
-	vhosts := extractVhosts("edge", []*iutil.Event{ev1, ev2})
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev1, ev2})
 	require.Len(t, vhosts, 1)
 
 	require.Equal(t, "web.lan", vhosts[0].Domain)
 	require.Equal(t, "web", vhosts[0].Service)
 	require.Equal(t, []string{"10.0.1.20:3000", "10.0.1.21:3000"}, vhosts[0].Upstreams)
+}
+
+func TestExtractVhostsStructuredBasic(t *testing.T) {
+	now := time.Now()
+	ifaces := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.50"}, nil),
+	}
+	inst := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service":           "wiki",
+		"user.label.caddy-external.0.domain":   "example.com",
+		"user.label.caddy-external.0.upstream": "8080",
+		"user.label.caddy-external.0.redirs.0": "www.example.com,uri",
+		"user.label.caddy-external.0.redirs.1": "wiki.example.com,uri",
+		"user.label.caddy-external.0.redirs.2": "docs.example.com,uri",
+		"user.label.caddy-internal.0.domain":   "example.com",
+		"user.label.caddy-internal.0.upstream": "8080",
+		"user.label.caddy-internal.0.template": "internal_acme.caddyfile",
+		"user.label.caddy-internal.0.redirs.0": "www.example.com,uri,template=internal_acme.caddyfile",
+		"user.label.caddy-internal.0.redirs.1": "wiki.example.com,uri,template=internal_acme.caddyfile",
+		"user.label.caddy-internal.0.redirs.2": "docs.example.com,uri,template=internal_acme.caddyfile",
+	}, ifaces, nil)
+	ev := iutil.NewEvent(now, "instance-started", "default", "wiki-1", "").WithInstance(inst, true)
+
+	// Verify caddy-external target
+	vhostsExt := extractVhosts(nil, "caddy-external", []*iutil.Event{ev})
+	require.Len(t, vhostsExt, 4)
+
+	require.Equal(t, "example.com", vhostsExt[0].Domain)
+	require.Equal(t, []string{"10.0.1.50:8080"}, vhostsExt[0].Upstreams)
+	require.Empty(t, vhostsExt[0].Redirect)
+	require.Empty(t, vhostsExt[0].Template)
+	require.Equal(t, "wiki", vhostsExt[0].Service)
+
+	require.Equal(t, "www.example.com", vhostsExt[1].Domain)
+	require.Equal(t, "https://example.com{uri}", vhostsExt[1].Redirect)
+	require.Empty(t, vhostsExt[1].Template)
+
+	require.Equal(t, "wiki.example.com", vhostsExt[2].Domain)
+	require.Equal(t, "https://example.com{uri}", vhostsExt[2].Redirect)
+
+	require.Equal(t, "docs.example.com", vhostsExt[3].Domain)
+	require.Equal(t, "https://example.com{uri}", vhostsExt[3].Redirect)
+
+	// Verify caddy-internal target with template propagation
+	vhostsInt := extractVhosts(nil, "caddy-internal", []*iutil.Event{ev})
+	require.Len(t, vhostsInt, 4)
+
+	require.Equal(t, "example.com", vhostsInt[0].Domain)
+	require.Equal(t, []string{"10.0.1.50:8080"}, vhostsInt[0].Upstreams)
+	require.Equal(t, "internal_acme.caddyfile", vhostsInt[0].Template)
+
+	require.Equal(t, "www.example.com", vhostsInt[1].Domain)
+	require.Equal(t, "https://example.com{uri}", vhostsInt[1].Redirect)
+	require.Equal(t, "internal_acme.caddyfile", vhostsInt[1].Template)
+
+	require.Equal(t, "wiki.example.com", vhostsInt[2].Domain)
+	require.Equal(t, "https://example.com{uri}", vhostsInt[2].Redirect)
+	require.Equal(t, "internal_acme.caddyfile", vhostsInt[2].Template)
+
+	require.Equal(t, "docs.example.com", vhostsInt[3].Domain)
+	require.Equal(t, "https://example.com{uri}", vhostsInt[3].Redirect)
+	require.Equal(t, "internal_acme.caddyfile", vhostsInt[3].Template)
+}
+
+func TestExtractVhostsStructuredMultiRouteAndGaps(t *testing.T) {
+	now := time.Now()
+	ifaces := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.60"}, nil),
+	}
+	// Index 0 and 2, skipping 1.
+	inst := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service": "app",
+		"user.label.edge.0.domain":   "app.lan",
+		"user.label.edge.0.upstream": "3000",
+		"user.label.edge.2.domain":   "metrics.lan",
+		"user.label.edge.2.upstream": "9090",
+		"user.label.edge.2.redirs.0": "stats.lan,no-uri",
+	}, ifaces, nil)
+	ev := iutil.NewEvent(now, "instance-started", "default", "app-1", "").WithInstance(inst, true)
+
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev})
+	require.Len(t, vhosts, 3)
+
+	require.Equal(t, "app.lan", vhosts[0].Domain)
+	require.Equal(t, []string{"10.0.1.60:3000"}, vhosts[0].Upstreams)
+
+	require.Equal(t, "metrics.lan", vhosts[1].Domain)
+	require.Equal(t, []string{"10.0.1.60:9090"}, vhosts[1].Upstreams)
+
+	require.Equal(t, "stats.lan", vhosts[2].Domain)
+	require.Equal(t, "https://metrics.lan", vhosts[2].Redirect)
+}
+
+func TestExtractVhostsStructuredMissingDomain(t *testing.T) {
+	now := time.Now()
+	ifaces := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.70"}, nil),
+	}
+	inst := iutil.NewInstance(true, map[string]string{
+		"user.label.edge.0.upstream": "8080",
+		"user.label.edge.1.domain":   "valid.lan",
+		"user.label.edge.1.upstream": "9090",
+	}, ifaces, nil)
+	ev := iutil.NewEvent(now, "instance-started", "default", "invalid-1", "").WithInstance(inst, true)
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+
+	vhosts := extractVhosts(logger, "edge", []*iutil.Event{ev})
+	require.Len(t, vhosts, 1)
+	require.Equal(t, "valid.lan", vhosts[0].Domain)
+	require.Equal(t, []string{"10.0.1.70:9090"}, vhosts[0].Upstreams)
+
+	logOutput := logBuf.String()
+	require.Contains(t, logOutput, "structured route missing domain; skipping route")
+	require.Contains(t, logOutput, "invalid-1")
+}
+
+func TestExtractVhostsStructuredMixedFormatRejected(t *testing.T) {
+	now := time.Now()
+	ifaces := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.80"}, nil),
+	}
+	inst := iutil.NewInstance(true, map[string]string{
+		"user.label.edge":          "legacy.lan,upstream=8080",
+		"user.label.edge.0.domain": "structured.lan",
+	}, ifaces, nil)
+	ev := iutil.NewEvent(now, "instance-started", "default", "mixed-1", "").WithInstance(inst, true)
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+
+	vhosts := extractVhosts(logger, "edge", []*iutil.Event{ev})
+	require.Empty(t, vhosts)
+
+	logOutput := logBuf.String()
+	require.Contains(t, logOutput, "instance mixes legacy and structured caddy labels; skipping")
+	require.Contains(t, logOutput, "mixed-1")
+}
+
+func TestExtractVhostsStructuredServiceReplicas(t *testing.T) {
+	now := time.Now()
+
+	// Replica 1 has structured route
+	ifaces1 := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.91"}, nil),
+	}
+	inst1 := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service": "web",
+		"user.label.edge.0.domain":   "web.example.com",
+		"user.label.edge.0.upstream": "8080",
+	}, ifaces1, nil)
+	ev1 := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst1, true)
+
+	// Replica 2 has only service and its own IP
+	ifaces2 := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.92"}, nil),
+	}
+	inst2 := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service": "web",
+	}, ifaces2, nil)
+	ev2 := iutil.NewEvent(now, "instance-started", "default", "web-2", "").WithInstance(inst2, true)
+
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev1, ev2})
+	require.Len(t, vhosts, 1)
+	require.Equal(t, "web.example.com", vhosts[0].Domain)
+	require.Equal(t, []string{"10.0.1.91:8080", "10.0.1.92:8080"}, vhosts[0].Upstreams)
+}
+
+func TestExtractVhostsStructuredCoexistence(t *testing.T) {
+	now := time.Now()
+
+	// Instance 1 uses legacy format
+	ifaces1 := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.101"}, nil),
+	}
+	inst1 := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service": "cluster",
+		"user.label.edge":            "cluster.lan,upstream=4000",
+	}, ifaces1, nil)
+	ev1 := iutil.NewEvent(now, "instance-started", "default", "clust-1", "").WithInstance(inst1, true)
+
+	// Instance 2 uses structured format
+	ifaces2 := []iutil.InstanceInterface{
+		iutil.NewInstanceInterface("default", "eth0", true, []string{"10.0.1.102"}, nil),
+	}
+	inst2 := iutil.NewInstance(true, map[string]string{
+		"user.incus-compose.service": "cluster",
+		"user.label.edge.0.domain":   "cluster.lan",
+		"user.label.edge.0.upstream": "4000",
+	}, ifaces2, nil)
+	ev2 := iutil.NewEvent(now, "instance-started", "default", "clust-2", "").WithInstance(inst2, true)
+
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev1, ev2})
+	require.Len(t, vhosts, 1)
+	require.Equal(t, "cluster.lan", vhosts[0].Domain)
+	require.Equal(t, []string{"10.0.1.101:4000", "10.0.1.102:4000"}, vhosts[0].Upstreams)
+}
+
+func TestExtractVhostsStructuredRedirCanonical(t *testing.T) {
+	now := time.Now()
+	inst := iutil.NewInstance(true, map[string]string{
+		"user.label.edge.0.domain": "old.lan",
+		"user.label.edge.0.redir":  "https://new.lan{uri}",
+	}, nil, nil)
+	ev := iutil.NewEvent(now, "instance-started", "default", "redir-canonical", "").WithInstance(inst, true)
+
+	vhosts := extractVhosts(nil, "edge", []*iutil.Event{ev})
+	require.Len(t, vhosts, 1)
+	require.Equal(t, "old.lan", vhosts[0].Domain)
+	require.Equal(t, "https://new.lan{uri}", vhosts[0].Redirect)
+	require.Empty(t, vhosts[0].Upstreams)
 }

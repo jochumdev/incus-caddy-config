@@ -69,6 +69,50 @@ For a target bound to prefix `edge`:
 
 ---
 
+## Structured Labels Format
+
+As an alternative to compressed single-string label values, `caddy-config` supports a structured label format using individual key-value pairs:
+
+```yaml
+services:
+  wiki:
+    labels:
+      caddy-external.0.domain: example.com
+      caddy-external.0.upstream: 8080
+      caddy-external.0.redirs.0: www.example.com,uri
+      caddy-external.0.redirs.1: wiki.example.com,uri
+      caddy-external.0.redirs.2: docs.example.com,uri
+      caddy-internal.0.domain: example.com
+      caddy-internal.0.upstream: 8080
+      caddy-internal.0.redirs.0: www.example.com,uri,template=internal_acme.caddyfile
+      caddy-internal.0.redirs.1: wiki.example.com,uri,template=internal_acme.caddyfile
+      caddy-internal.0.redirs.2: docs.example.com,uri,template=internal_acme.caddyfile
+```
+
+### Schema & Keys
+
+For target label `<L>` and route index `<n>` (non-negative integer):
+
+| Label Key | Description | Example |
+|---|---|---|
+| `<L>.<n>.domain` | **(Required)** Domain name(s) to match for route `<n>`. | `example.com` |
+| `<L>.<n>.upstream` | Upstream port (e.g. `8080`) or `host:port`. | `8080` |
+| `<L>.<n>.template` | Custom Caddyfile site template for route `<n>`. | `internal_acme.caddyfile` |
+| `<L>.<n>.network` | Network interface name for IP resolution. | `eth0` |
+| `<L>.<n>.redir` | Canonical redirect target (instead of upstream). | `https://new.example.com{uri}` |
+| `<L>.<n>.redirs.<m>` | Alias redirect domain with optional flags (e.g. `,uri`, `,no-uri`, `,template=<file>`). | `www.example.com,uri` |
+
+### Rules
+
+- **Service is once per instance**: Service name is set per instance (`user.label.<L>.service` or compose service), not per route index.
+- **No mixing formats on a single instance**: An instance must use either legacy compressed labels or structured labels for a given target label. Mixing both formats on the same instance logs an error and skips the instance. Different instances in the same project can use different formats.
+- **Required domain**: Each route index `<n>` must define `.domain`. If omitted, an error is logged and route `<n>` is skipped.
+- **Sparse indices**: Index gaps are valid (e.g. indices `0` and `2` without `1`). Routes are sorted and evaluated numerically.
+- **Redirection indices**: Multiple redirect domains use `.redirs.<m>` with ascending numeric indices `<m>`.
+
+
+---
+
 ## IPv4 Address Resolution
 
 `caddy-config` resolves upstream container IP addresses dynamically:

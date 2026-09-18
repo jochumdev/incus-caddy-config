@@ -2,8 +2,11 @@ package caddy
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -447,8 +450,308 @@ func resolveService(inst *iutil.Instance, prefix string) string {
 	return strings.TrimSpace(service)
 }
 
+type structuredRoute struct {
+	index    int
+	domain   string
+	upstream string
+	template string
+	network  string
+	redir    string
+	flags    map[string]string
+	redirs   map[int]string
+	rawRedir []string
+}
+
+func parseStructuredRoutes(inst *iutil.Instance, targetLabel string) (map[int]*structuredRoute, bool) {
+	labelKey := "user.label." + targetLabel
+	prefix := labelKey + "."
+
+	hasLegacy := false
+	val, ok := inst.ConfigValue(labelKey)
+	if ok && strings.TrimSpace(val) != "" {
+		hasLegacy = true
+	}
+
+	val, ok = inst.ConfigValue(prefix + "domain")
+	if ok && strings.TrimSpace(val) != "" {
+		hasLegacy = true
+	}
+
+	val, ok = inst.ConfigValue(prefix + "redirs")
+	if ok && strings.TrimSpace(val) != "" {
+		hasLegacy = true
+	}
+
+	var routes map[int]*structuredRoute
+	for k, v := range inst.Config() {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+
+		rem := strings.TrimPrefix(k, prefix)
+		idxStr, field, hasDot := strings.Cut(rem, ".")
+		if !hasDot {
+			continue
+		}
+
+		idx, err := strconv.Atoi(idxStr)
+		if err != nil || idx < 0 {
+			continue
+		}
+
+		if routes == nil {
+			routes = make(map[int]*structuredRoute)
+		}
+
+		route, exists := routes[idx]
+		if !exists {
+			route = &structuredRoute{
+				index:  idx,
+				flags:  make(map[string]string),
+				redirs: make(map[int]string),
+			}
+			routes[idx] = route
+		}
+
+		val := strings.TrimSpace(v)
+		switch field {
+		case "domain":
+			route.domain = val
+			route.flags["domain"] = val
+		case "upstream":
+			route.upstream = val
+			route.flags["upstream"] = val
+		case "template":
+			route.template = val
+			route.flags["template"] = val
+		case "network":
+			route.network = val
+			route.flags["network"] = val
+		case "redir":
+			route.redir = val
+			route.flags["redir"] = val
+		case "redirs":
+			route.rawRedir = append(route.rawRedir, val)
+		default:
+			if strings.HasPrefix(field, "redirs.") {
+				mStr := strings.TrimPrefix(field, "redirs.")
+				m, err := strconv.Atoi(mStr)
+				if err == nil && m >= 0 {
+					route.redirs[m] = val
+				} else {
+					route.rawRedir = append(route.rawRedir, val)
+				}
+			} else {
+				route.flags[field] = val
+			}
+		}
+	}
+
+	return routes, hasLegacy
+}
+
+func addVhost(
+	vhostMap map[string]*vhost,
+	order *[]string,
+	domain, service, redirectURL, tmpl, upstream string,
+	flags map[string]string,
+) {
+	existing, found := vhostMap[domain]
+	if !found {
+		v := &vhost{
+			Domain:   domain,
+			Service:  service,
+			Redirect: redirectURL,
+			Template: tmpl,
+			Flags:    flags,
+		}
+		if upstream != "" {
+			v.Upstreams = []string{upstream}
+		}
+		vhostMap[domain] = v
+		*order = append(*order, domain)
+
+		return
+	}
+
+	if upstream != "" {
+		if !slices.Contains(existing.Upstreams, upstream) {
+			existing.Upstreams = append(existing.Upstreams, upstream)
+			slices.Sort(existing.Upstreams)
+		}
+		if redirectURL == "" {
+			existing.Redirect = ""
+		}
+	}
+	if existing.Redirect == "" && redirectURL != "" {
+		existing.Redirect = redirectURL
+	}
+	if existing.Template == "" && tmpl != "" {
+		existing.Template = tmpl
+	}
+	if existing.Service == "" && service != "" {
+		existing.Service = service
+	}
+	if existing.Flags == nil {
+		existing.Flags = make(map[string]string)
+	}
+	for k, v := range flags {
+		_, ok := existing.Flags[k]
+		if !ok {
+			existing.Flags[k] = v
+		}
+	}
+}
+
+func addRedirVhost(
+	vhostMap map[string]*vhost,
+	order *[]string,
+	domain, service, redirectURL, tmpl string,
+	flags map[string]string,
+) {
+	existing, found := vhostMap[domain]
+	if !found {
+		v := &vhost{
+			Domain:   domain,
+			Service:  service,
+			Redirect: redirectURL,
+			Template: tmpl,
+			Flags:    flags,
+		}
+		vhostMap[domain] = v
+		*order = append(*order, domain)
+
+		return
+	}
+
+	if len(existing.Upstreams) == 0 && existing.Redirect == "" {
+		existing.Redirect = redirectURL
+	}
+	if existing.Template == "" && tmpl != "" {
+		existing.Template = tmpl
+	}
+	if existing.Service == "" && service != "" {
+		existing.Service = service
+	}
+	if existing.Flags == nil {
+		existing.Flags = make(map[string]string)
+	}
+	for k, v := range flags {
+		_, ok := existing.Flags[k]
+		if !ok {
+			existing.Flags[k] = v
+		}
+	}
+}
+
+func processStructuredRoute(
+	inst *iutil.Instance,
+	route *structuredRoute,
+	service, prefix string,
+	vhostMap map[string]*vhost,
+	order *[]string,
+) {
+	domainFields := strings.Fields(route.domain)
+	if len(domainFields) == 0 {
+		return
+	}
+	cleanDomain := strings.Join(domainFields, " ")
+
+	network := route.network
+	if network == "" {
+		network, _ = inst.ConfigValue(prefix + "network")
+		network = strings.TrimSpace(network)
+	}
+
+	var redirectURL string
+	if route.redir != "" {
+		redirectURL = route.redir
+		includeURI := route.flags["uri"] != "false"
+		if includeURI {
+			hasSuffix := strings.HasSuffix(redirectURL, "{uri}")
+			if !hasSuffix {
+				redirectURL += "{uri}"
+			}
+		} else {
+			redirectURL = strings.TrimSuffix(redirectURL, "{uri}")
+		}
+	}
+
+	ip := resolveIPv4(inst, network)
+	var upstream string
+	if ip != "" && redirectURL == "" {
+		if route.upstream != "" {
+			if route.upstream != "false" && route.upstream != "none" {
+				if strings.Contains(route.upstream, ":") {
+					upstream = route.upstream
+				} else {
+					upstream = fmt.Sprintf("%s:%s", ip, route.upstream)
+				}
+			}
+		} else {
+			upstream = ip
+		}
+	}
+
+	addVhost(vhostMap, order, cleanDomain, service, redirectURL, route.template, upstream, route.flags)
+
+	var redirList []string
+	mIndices := make([]int, 0, len(route.redirs))
+	for m := range route.redirs {
+		mIndices = append(mIndices, m)
+	}
+	slices.Sort(mIndices)
+	for _, m := range mIndices {
+		redirList = append(redirList, route.redirs[m])
+	}
+	redirList = append(redirList, route.rawRedir...)
+
+	if len(redirList) == 0 {
+		return
+	}
+
+	var baseTarget string
+	if redirectURL != "" {
+		baseTarget = redirectURL
+	} else {
+		primaryDomain := domainFields[0]
+		hasPrefix := strings.HasPrefix(primaryDomain, "http://") || strings.HasPrefix(primaryDomain, "https://")
+		if hasPrefix {
+			baseTarget = primaryDomain
+		} else {
+			baseTarget = "https://" + primaryDomain
+		}
+	}
+
+	for _, rawRedir := range redirList {
+		entries := parseEntries(rawRedir)
+		for _, entry := range entries {
+			if entry.Value == "" || slices.Contains(domainFields, entry.Value) {
+				continue
+			}
+
+			targetURL := baseTarget
+			if entry.Flags["uri"] != "false" {
+				hasSuffix := strings.HasSuffix(targetURL, "{uri}")
+				if !hasSuffix {
+					targetURL += "{uri}"
+				}
+			} else {
+				targetURL = strings.TrimSuffix(targetURL, "{uri}")
+			}
+
+			redirTmpl := entry.Flags["template"]
+			addRedirVhost(vhostMap, order, entry.Value, service, targetURL, redirTmpl, entry.Flags)
+		}
+	}
+}
+
 // extractVhosts extracts and groups vhost routes for a target label from instance events.
-func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
+func extractVhosts(logger *slog.Logger, targetLabel string, instances []*iutil.Event) []vhost {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	labelKey := "user.label." + targetLabel
 	prefix := labelKey + "."
 	vhostMap := make(map[string]*vhost)
@@ -458,6 +761,7 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		domain  string
 		network string
 		redirs  string
+		routes  []*structuredRoute
 	}
 	serviceConfigs := make(map[string]serviceConfig)
 
@@ -469,6 +773,36 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 
 		service := resolveService(inst, prefix)
 		if service == "" {
+			continue
+		}
+
+		routes, hasLegacy := parseStructuredRoutes(inst, targetLabel)
+		if hasLegacy && len(routes) > 0 {
+			continue
+		}
+
+		cfg := serviceConfigs[service]
+		if len(routes) > 0 {
+			if len(cfg.routes) == 0 {
+				indices := make([]int, 0, len(routes))
+				for idx := range routes {
+					indices = append(indices, idx)
+				}
+				slices.Sort(indices)
+
+				var valid []*structuredRoute
+				for _, idx := range indices {
+					r := routes[idx]
+					if r.domain != "" {
+						valid = append(valid, r)
+					}
+				}
+				if len(valid) > 0 {
+					cfg.routes = valid
+				}
+			}
+			serviceConfigs[service] = cfg
+
 			continue
 		}
 
@@ -495,7 +829,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		redirs, _ := inst.ConfigValue(prefix + "redirs")
 		redirs = strings.TrimSpace(redirs)
 
-		cfg := serviceConfigs[service]
 		if cfg.domain == "" && domain != "" {
 			cfg.domain = domain
 		}
@@ -516,6 +849,42 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 
 		service := resolveService(inst, prefix)
 
+		routes, hasLegacy := parseStructuredRoutes(inst, targetLabel)
+		if hasLegacy && len(routes) > 0 {
+			logger.Error("instance mixes legacy and structured caddy labels; skipping", "instance", ev.Name(), "project", ev.ProjectName(), "target", targetLabel)
+
+			continue
+		}
+
+		if len(routes) > 0 {
+			indices := make([]int, 0, len(routes))
+			for idx := range routes {
+				indices = append(indices, idx)
+			}
+			slices.Sort(indices)
+
+			for _, idx := range indices {
+				r := routes[idx]
+				if r.domain == "" {
+					logger.Error("structured route missing domain; skipping route", "instance", ev.Name(), "project", ev.ProjectName(), "target", targetLabel, "index", idx)
+
+					continue
+				}
+				processStructuredRoute(inst, r, service, prefix, vhostMap, &order)
+			}
+
+			continue
+		}
+
+		cfg := serviceConfigs[service]
+		if !hasLegacy && len(cfg.routes) > 0 {
+			for _, r := range cfg.routes {
+				processStructuredRoute(inst, r, service, prefix, vhostMap, &order)
+			}
+
+			continue
+		}
+
 		domain, _ := inst.ConfigValue(labelKey)
 		if domain == "" {
 			domain, _ = inst.ConfigValue(prefix + "domain")
@@ -529,7 +898,6 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		network = strings.TrimSpace(network)
 
 		if service != "" {
-			cfg := serviceConfigs[service]
 			if domain == "" {
 				domain = cfg.domain
 			}
@@ -612,48 +980,7 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 		tmpl := domainFlags["template"]
 
 		if cleanDomain != "" {
-			existing, found := vhostMap[cleanDomain]
-			if !found {
-				v := &vhost{
-					Domain:   cleanDomain,
-					Service:  service,
-					Redirect: redirectURL,
-					Template: tmpl,
-					Flags:    domainFlags,
-				}
-				if upstream != "" {
-					v.Upstreams = []string{upstream}
-				}
-				vhostMap[cleanDomain] = v
-				order = append(order, cleanDomain)
-			} else {
-				if upstream != "" {
-					if !slices.Contains(existing.Upstreams, upstream) {
-						existing.Upstreams = append(existing.Upstreams, upstream)
-						slices.Sort(existing.Upstreams)
-					}
-					if redirectURL == "" {
-						existing.Redirect = ""
-					}
-				}
-				if existing.Redirect == "" && redirectURL != "" {
-					existing.Redirect = redirectURL
-				}
-				if existing.Template == "" && tmpl != "" {
-					existing.Template = tmpl
-				}
-				if existing.Service == "" && service != "" {
-					existing.Service = service
-				}
-				if existing.Flags == nil {
-					existing.Flags = make(map[string]string)
-				}
-				for k, v := range domainFlags {
-					if _, ok := existing.Flags[k]; !ok {
-						existing.Flags[k] = v
-					}
-				}
-			}
+			addVhost(vhostMap, &order, cleanDomain, service, redirectURL, tmpl, upstream, domainFlags)
 		}
 
 		if redirs != "" {
@@ -662,7 +989,8 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 				baseTarget = redirectURL
 			} else if cleanDomain != "" {
 				primaryDomain := strings.Fields(cleanDomain)[0]
-				if strings.HasPrefix(primaryDomain, "http://") || strings.HasPrefix(primaryDomain, "https://") {
+				hasPrefix := strings.HasPrefix(primaryDomain, "http://") || strings.HasPrefix(primaryDomain, "https://")
+				if hasPrefix {
 					baseTarget = primaryDomain
 				} else {
 					baseTarget = "https://" + primaryDomain
@@ -680,7 +1008,8 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 
 					targetURL := baseTarget
 					if entry.Flags["uri"] != "false" {
-						if !strings.HasSuffix(targetURL, "{uri}") {
+						hasSuffix := strings.HasSuffix(targetURL, "{uri}")
+						if !hasSuffix {
 							targetURL += "{uri}"
 						}
 					} else {
@@ -688,36 +1017,7 @@ func extractVhosts(targetLabel string, instances []*iutil.Event) []vhost {
 					}
 
 					redirTmpl := entry.Flags["template"]
-
-					existingRedir, found := vhostMap[entry.Value]
-					if !found {
-						vhostMap[entry.Value] = &vhost{
-							Domain:   entry.Value,
-							Service:  service,
-							Redirect: targetURL,
-							Template: redirTmpl,
-							Flags:    entry.Flags,
-						}
-						order = append(order, entry.Value)
-					} else {
-						if len(existingRedir.Upstreams) == 0 && existingRedir.Redirect == "" {
-							existingRedir.Redirect = targetURL
-						}
-						if existingRedir.Template == "" && redirTmpl != "" {
-							existingRedir.Template = redirTmpl
-						}
-						if existingRedir.Service == "" && service != "" {
-							existingRedir.Service = service
-						}
-						if existingRedir.Flags == nil {
-							existingRedir.Flags = make(map[string]string)
-						}
-						for k, v := range entry.Flags {
-							if _, ok := existingRedir.Flags[k]; !ok {
-								existingRedir.Flags[k] = v
-							}
-						}
-					}
+					addRedirVhost(vhostMap, &order, entry.Value, service, targetURL, redirTmpl, entry.Flags)
 				}
 			}
 		}
