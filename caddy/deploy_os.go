@@ -43,7 +43,7 @@ func deployOS(ctx context.Context, logger *slog.Logger, target Target, content [
 			return fmt.Errorf("creating directory %s: %w", dir, err)
 		}
 
-		stagingPath := filepath.Join(dir, "."+filepath.Base(caddyfilePath)+".tmp")
+		stagingPath := filepath.Join(dir, filepath.Base(caddyfilePath)+".tmp")
 
 		err = os.WriteFile(stagingPath, content, 0o600)
 		if err != nil {
@@ -58,6 +58,17 @@ func deployOS(ctx context.Context, logger *slog.Logger, target Target, content [
 		err = fmtCmd.Run()
 		if err != nil {
 			return fmt.Errorf("caddy fmt failed: %w (output: %q)", err, fmtOut.String())
+		}
+
+		validateCmd := execCommand(ctx, "caddy", "validate", "--config", stagingPath)
+		var validateOut bytes.Buffer
+		validateCmd.Stdout = &validateOut
+		validateCmd.Stderr = &validateOut
+
+		err = validateCmd.Run()
+		if err != nil {
+			logger.Error("Validate failed", "error", err, "content", content)
+			return fmt.Errorf("caddy validate failed: %w (output: %q)", err, validateOut.String())
 		}
 
 		err = os.Rename(stagingPath, caddyfilePath)

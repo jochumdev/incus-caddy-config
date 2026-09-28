@@ -97,7 +97,7 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 
 		containerStagingPath := filepath.Join(
 			filepath.Dir(caddyfilePath),
-			"."+filepath.Base(caddyfilePath)+".tmp",
+			filepath.Base(caddyfilePath)+".tmp",
 		)
 
 		if vol != nil {
@@ -107,7 +107,7 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 			}
 
 			sftpTargetPath = "/" + strings.TrimPrefix(relPath, "/")
-			sftpStagingPath = "/" + strings.TrimPrefix(filepath.Join(filepath.Dir(relPath), "."+filepath.Base(relPath)+".tmp"), "/")
+			sftpStagingPath = "/" + strings.TrimPrefix(filepath.Join(filepath.Dir(relPath), filepath.Base(relPath)+".tmp"), "/")
 
 			logger.Debug("resolved storage volume for caddy",
 				"pool", vol.pool,
@@ -174,6 +174,30 @@ func deploy(ctx context.Context, logger *slog.Logger, conn *iclient.Connection, 
 			if !ok || int(exitCode) != 0 {
 				return fmt.Errorf("caddy fmt failed (exit %d): stdout: %q, stderr: %q",
 					int(exitCode), fmtStdout.String(), fmtStderr.String())
+			}
+
+			var validateStdout, validateStderr bytes.Buffer
+			validatePost := incusapi.InstanceExecPost{
+				Command: []string{"caddy", "validate", "--config", containerStagingPath},
+			}
+			updates, err = conn.ExecInstance(ctx, project, instance, validatePost, &iclient.InstanceExecArgs{
+				Stdout: &validateStdout,
+				Stderr: &validateStderr,
+			})
+			if err != nil {
+				logger.Error("Validate failed", "project", project, "instance", instance, "error", err, "content", content)
+				return fmt.Errorf("executing caddy validate in %s:%s: %w", project, instance, err)
+			}
+
+			op, err = iclient.WaitOperation(ctx, updates)
+			if err != nil {
+				return fmt.Errorf("waiting for caddy validate: %w", err)
+			}
+
+			exitCode, ok = op.Metadata["return"].(float64)
+			if !ok || int(exitCode) != 0 {
+				return fmt.Errorf("caddy validate failed (exit %d): stdout: %q, stderr: %q",
+					int(exitCode), validateStdout.String(), validateStderr.String())
 			}
 		}
 
