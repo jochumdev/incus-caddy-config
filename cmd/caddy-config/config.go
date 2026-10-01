@@ -22,15 +22,16 @@ const (
 )
 
 type config struct {
-	IncusURL   string
-	Token      string
-	DataDir    string
-	SecretsDir string
-	ClientCert string
-	ClientKey  string
-	Restricted bool
-	Remote     string
-	UseRemote  bool
+	IncusURL          string
+	ServerFingerprint string
+	Token             string
+	DataDir           string
+	SecretsDir        string
+	ClientCert        string
+	ClientKey         string
+	Restricted        bool
+	Remote            string
+	UseRemote         bool
 
 	Projects  []string
 	Targets   []caddy.Target
@@ -52,15 +53,16 @@ type config struct {
 }
 
 type mainActionArgs struct {
-	IncusURL   string
-	Token      string
-	DataDir    string
-	SecretsDir string
-	ClientCert string
-	ClientKey  string
-	Restricted bool
-	Remote     string
-	UseRemote  bool
+	IncusURL          string
+	ServerFingerprint string
+	Token             string
+	DataDir           string
+	SecretsDir        string
+	ClientCert        string
+	ClientKey         string
+	Restricted        bool
+	Remote            string
+	UseRemote         bool
 
 	Projects  []string
 	Targets   []caddy.Target
@@ -120,29 +122,30 @@ func (c *config) validate() (*mainActionArgs, error) {
 	}
 
 	return &mainActionArgs{
-		IncusURL:       c.IncusURL,
-		Token:          c.Token,
-		DataDir:        c.DataDir,
-		SecretsDir:     c.SecretsDir,
-		ClientCert:     c.ClientCert,
-		ClientKey:      c.ClientKey,
-		Restricted:     c.Restricted,
-		Remote:         c.Remote,
-		UseRemote:      c.UseRemote,
-		Projects:       c.Projects,
-		Targets:        c.Targets,
-		OSTargets:      c.OSTargets,
-		CaddyfilePath:  c.CaddyfilePath,
-		TemplatesDir:   c.TemplatesDir,
-		DebounceWindow: c.DebounceWindow,
-		HTTPAddr:       c.HTTPAddr,
-		Exclude:        c.Exclude,
-		Log:            c.Log,
-		Pprof:          c.Pprof,
-		Workers:        c.Workers,
-		ReadTimeout:    c.ReadTimeout,
-		ProjectDelay:   c.ProjectDelay,
-		ReadDelay:      c.ReadDelay,
+		IncusURL:          c.IncusURL,
+		ServerFingerprint: c.ServerFingerprint,
+		Token:             c.Token,
+		DataDir:           c.DataDir,
+		SecretsDir:        c.SecretsDir,
+		ClientCert:        c.ClientCert,
+		ClientKey:         c.ClientKey,
+		Restricted:        c.Restricted,
+		Remote:            c.Remote,
+		UseRemote:         c.UseRemote,
+		Projects:          c.Projects,
+		Targets:           c.Targets,
+		OSTargets:         c.OSTargets,
+		CaddyfilePath:     c.CaddyfilePath,
+		TemplatesDir:      c.TemplatesDir,
+		DebounceWindow:    c.DebounceWindow,
+		HTTPAddr:          c.HTTPAddr,
+		Exclude:           c.Exclude,
+		Log:               c.Log,
+		Pprof:             c.Pprof,
+		Workers:           c.Workers,
+		ReadTimeout:       c.ReadTimeout,
+		ProjectDelay:      c.ProjectDelay,
+		ReadDelay:         c.ReadDelay,
 	}, nil
 }
 

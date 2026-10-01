@@ -59,6 +59,12 @@ func runCommand(cfg *config) *cli.Command {
 				Sources:     cli.EnvVars("INCUS_CADDY_INCUS"),
 			},
 			&cli.StringFlag{
+				Name:        "server-fingerprint",
+				Usage:       "Server certificate SHA-256 fingerprint",
+				Destination: &cfg.ServerFingerprint,
+				Sources:     cli.EnvVars("INCUS_CADDY_SERVER_FINGERPRINT", "SERVER_FINGERPRINT"),
+			},
+			&cli.StringFlag{
 				Name:        "token",
 				Usage:       "One-time trust token; a token file under --secrets-dir is read when this is empty",
 				Destination: &cfg.Token,
@@ -247,6 +253,7 @@ func mainAction(ctx context.Context, args *mainActionArgs) error {
 	)
 
 	logger.Debug("configuration",
+		"server_fingerprint", args.ServerFingerprint,
 		"projects", args.Projects,
 		"targets", args.Targets,
 		"os_targets", args.OSTargets,
@@ -283,18 +290,19 @@ func run(ctx context.Context, logger *slog.Logger, args *mainActionArgs) error {
 	logger.Info("chain", "plugins", names)
 
 	trust := incustrust.Config{
-		Name:       certName,
-		UserAgent:  certName + "/" + version,
-		URL:        args.IncusURL,
-		ClientCert: args.ClientCert,
-		ClientKey:  args.ClientKey,
-		Token:      args.Token,
-		DataDir:    args.DataDir,
-		SecretsDir: args.SecretsDir,
-		Restricted: args.Restricted,
-		Projects:   args.Projects,
-		Remote:     args.Remote,
-		UseRemote:  args.UseRemote,
+		Name:              certName,
+		UserAgent:         certName + "/" + version,
+		URL:               args.IncusURL,
+		ServerFingerprint: args.ServerFingerprint,
+		ClientCert:        args.ClientCert,
+		ClientKey:         args.ClientKey,
+		Token:             args.Token,
+		DataDir:           args.DataDir,
+		SecretsDir:        args.SecretsDir,
+		Restricted:        args.Restricted,
+		Projects:          args.Projects,
+		Remote:            args.Remote,
+		UseRemote:         args.UseRemote,
 	}
 
 	var conn *iclient.Connection

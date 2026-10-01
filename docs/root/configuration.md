@@ -24,6 +24,7 @@ Every flag maps to exactly **one canonical environment variable** prefixed with 
 | Flag | Canonical Env Var | Default | Description |
 |---|---|---|---|
 | `--incus` | `INCUS_CADDY_INCUS` | | URL of the Incus API (e.g. `https://127.0.0.1:8443`). |
+| `--server-fingerprint` | `INCUS_CADDY_SERVER_FINGERPRINT` | | Optional SHA-256 fingerprint to pin the Incus server certificate. |
 | `--token` | `INCUS_CADDY_TOKEN` | | One-time trust token. If omitted, reads from `--secrets-dir/token`. |
 | `--data-dir` | `INCUS_CADDY_DATA_DIR` | `/var/lib/caddy-config` | Persistent directory storing the enrolled client TLS certificate. |
 | `--secrets-dir` | `INCUS_CADDY_SECRETS_DIR` | `/run/secrets` | Directory holding secret files (e.g. `/run/secrets/token`). |

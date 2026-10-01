@@ -31,6 +31,7 @@ func TestRunCommandFlags(t *testing.T) {
 	_ = cmd.Run(ctx, []string{
 		"run",
 		"--incus", "https://127.0.0.1:8443",
+		"--server-fingerprint", "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
 		"--token", "my-secret-token",
 		"--data-dir", "/tmp/caddy-data",
 		"--secrets-dir", "/tmp/caddy-secrets",
@@ -60,6 +61,7 @@ func TestRunCommandFlags(t *testing.T) {
 	// But before that, all flags are parsed and written directly to cfg Destination pointers!
 
 	require.Equal(t, "https://127.0.0.1:8443", cfg.IncusURL)
+	require.Equal(t, "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90", cfg.ServerFingerprint)
 	require.Equal(t, "my-secret-token", cfg.Token)
 	require.Equal(t, "/tmp/caddy-data", cfg.DataDir)
 	require.Equal(t, "/tmp/caddy-secrets", cfg.SecretsDir)
@@ -175,6 +177,7 @@ func TestMainAction(t *testing.T) {
 }
 
 func TestRunCommandPluralEnvVars(t *testing.T) {
+	t.Setenv("INCUS_CADDY_SERVER_FINGERPRINT", "fp-from-env")
 	t.Setenv("INCUS_CADDY_PROJECTS", "p1,p2")
 	t.Setenv("INCUS_CADDY_INSTANCES", "edge,instance=caddy-1,project=default internal,instance=caddy-2,project=default")
 	t.Setenv("INCUS_CADDY_OS_PATHS", "path=/etc/caddy/Caddyfile,edge,path=/var/caddy/Caddyfile")
@@ -188,6 +191,7 @@ func TestRunCommandPluralEnvVars(t *testing.T) {
 
 	_ = cmd.Run(ctx, []string{"run"})
 
+	require.Equal(t, "fp-from-env", cfg.ServerFingerprint)
 	require.Equal(t, []string{"p1", "p2"}, cfg.Projects)
 	require.Len(t, cfg.Targets, 2)
 	require.Equal(t, "edge", cfg.Targets[0].Label)

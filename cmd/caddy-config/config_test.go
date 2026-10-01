@@ -40,12 +40,14 @@ func TestConfigValidate(t *testing.T) {
 	require.Equal(t, "/var/caddy/Caddyfile", p1)
 
 	// Both Targets and OSTargets.
+	cfg.ServerFingerprint = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
 	cfg.Targets = []caddy.Target{
 		caddy.NewTarget("external", map[string]string{"project": "default", "instance": "caddy-prod"}),
 		caddy.NewTarget("internal", map[string]string{"project": "infra", "instance": "caddy-dev"}),
 	}
 	args, err = cfg.validate()
 	require.NoError(t, err)
+	require.Equal(t, "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90", args.ServerFingerprint)
 	require.Len(t, args.Targets, 2)
 	require.Equal(t, "external", args.Targets[0].Label)
 	proj0, _ := args.Targets[0].Flag("project")
