@@ -53,6 +53,7 @@ func chain(logger *slog.Logger, args *mainActionArgs) []position {
 			enricher.ReadTimeout(args.ReadTimeout),
 			enricher.ReadDelay(args.ReadDelay),
 			enricher.Project(serves(logger, args.Projects)),
+			enricher.Instance(servesInstance(logger, args.Targets, args.OSTargets)),
 		)},
 	)
 
@@ -140,4 +141,52 @@ func serves(logger *slog.Logger, projects []string) func(*incusapi.Project) bool
 
 		return serve
 	}
+}
+
+func servesInstance(logger *slog.Logger, targetLists ...[]caddy.Target) func(*incusapi.Instance) bool {
+	var labels []string
+	for _, list := range targetLists {
+		for _, t := range list {
+			if !slices.Contains(labels, t.Label) {
+				labels = append(labels, t.Label)
+			}
+		}
+	}
+	if len(labels) == 0 {
+		return nil
+	}
+
+	return func(inst *incusapi.Instance) bool {
+		if inst == nil {
+			return false
+		}
+
+		cfg := inst.ExpandedConfig
+		if len(cfg) == 0 {
+			cfg = inst.Config
+		}
+
+		serve := hasLabels(cfg, labels)
+		if !serve {
+			logger.Debug("Not serving instance", "project", inst.Project, "instance", inst.Name)
+		} else {
+			logger.Log(context.Background(), shared.LevelTrace, "Serving instance", "project", inst.Project, "instance", inst.Name)
+		}
+
+		return serve
+	}
+}
+
+func hasLabels(cfg map[string]string, labels []string) bool {
+	for _, label := range labels {
+		exact := "user.label." + label
+		prefix := exact + "."
+		for k := range cfg {
+			if k == exact || strings.HasPrefix(k, prefix) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

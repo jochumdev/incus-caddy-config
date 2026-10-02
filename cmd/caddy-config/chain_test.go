@@ -96,3 +96,76 @@ func TestLogAt(t *testing.T) {
 	require.Nil(t, logAt(logger, "", "arrival"))
 	require.NotEmpty(t, logAt(logger, "DEBUG", "arrival"))
 }
+
+func TestChainServesInstance(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Nil when targets are empty.
+	require.Nil(t, servesInstance(logger, nil, nil))
+	require.Nil(t, servesInstance(logger, []caddy.Target{}, []caddy.Target{}))
+
+	targets := []caddy.Target{
+		caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+	}
+	osTargets := []caddy.Target{
+		caddy.NewTarget("edge", map[string]string{"path": "/tmp/Caddyfile"}),
+	}
+
+	fn := servesInstance(logger, targets, osTargets)
+	require.NotNil(t, fn)
+
+	// Nil instance.
+	require.False(t, fn(nil))
+
+	// No labels.
+	require.False(t, fn(&incusapi.Instance{Name: "empty"}))
+
+	// Unrelated labels.
+	require.False(t, fn(&incusapi.Instance{
+		Name: "other",
+		InstancePut: incusapi.InstancePut{
+			Config: map[string]string{
+				"user.other":       "true",
+				"user.label.other": "example.com",
+			},
+		},
+	}))
+
+	// Exact target match in Config.
+	require.True(t, fn(&incusapi.Instance{
+		Name: "web",
+		InstancePut: incusapi.InstancePut{
+			Config: map[string]string{
+				"user.label.caddy": "web.example.com",
+			},
+		},
+	}))
+
+	// Prefix target match in Config.
+	require.True(t, fn(&incusapi.Instance{
+		Name: "api",
+		InstancePut: incusapi.InstancePut{
+			Config: map[string]string{
+				"user.label.caddy.0.domain": "api.example.com",
+			},
+		},
+	}))
+
+	// OS target match.
+	require.True(t, fn(&incusapi.Instance{
+		Name: "edge-service",
+		InstancePut: incusapi.InstancePut{
+			Config: map[string]string{
+				"user.label.edge": "edge.example.com",
+			},
+		},
+	}))
+
+	// ExpandedConfig takes precedence over Config.
+	require.True(t, fn(&incusapi.Instance{
+		Name: "expanded",
+		ExpandedConfig: map[string]string{
+			"user.label.caddy": "expanded.example.com",
+		},
+	}))
+}

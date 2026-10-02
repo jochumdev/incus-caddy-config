@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/KimMachineGun/automemlimit v1.0.0
 	github.com/avast/retry-go/v5 v5.0.0
-	github.com/lxc/incus-compose v1.3.4-0.20261002002751-710295c4a581
+	github.com/lxc/incus-compose v1.3.4-0.20261002041938-13b1b7a445dc
 	github.com/lxc/incus/v7 v7.5.1
 	github.com/pkg/sftp v1.13.11
 	github.com/stretchr/testify v1.12.1
