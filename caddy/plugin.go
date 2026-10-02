@@ -71,6 +71,8 @@ func (p *Plugin) Wants() []iutil.Want {
 		"instance-created",
 		"instance-started",
 		"instance-stopped",
+		"instance-shutdown",
+		"instance-restarted",
 		"instance-deleted",
 		"instance-updated",
 		"instance-renamed",

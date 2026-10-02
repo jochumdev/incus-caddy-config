@@ -60,7 +60,7 @@ func TestDeployOSValidateFailure(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 
 	// Staging file should be preserved on failure for inspection.
-	staging := filepath.Join(tmpDir, ".Caddyfile.tmp")
+	staging := filepath.Join(tmpDir, "Caddyfile.tmp")
 	_, err = os.Stat(staging)
 	require.NoError(t, err)
 }
@@ -74,7 +74,7 @@ func TestDeployOSReloadFailureDaemonOffline(t *testing.T) {
 	defer func() { execCommand = origExec }()
 
 	execCommand = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-		if len(args) > 0 && args[0] == "fmt" {
+		if len(args) > 0 && (args[0] == "fmt" || args[0] == "validate") {
 			return exec.CommandContext(ctx, "sh", "-c", "exit 0")
 		}
 

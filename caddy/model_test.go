@@ -985,3 +985,29 @@ func TestExtractVhostsStructuredRedirCanonical(t *testing.T) {
 	require.Equal(t, "https://new.lan{uri}", vhosts[0].Redirect)
 	require.Empty(t, vhosts[0].Upstreams)
 }
+
+func TestExtractVhostsHostPortWithoutIP(t *testing.T) {
+	now := time.Now()
+
+	// 1. Legacy label format with host:port upstream and no network interfaces / IP.
+	instLegacy := iutil.NewInstance(true, map[string]string{
+		"user.label.caddy": "app.example.com,upstream=192.0.2.10:8080",
+	}, nil, nil)
+	evLegacy := iutil.NewEvent(now, "instance-started", "default", "app-legacy", "").WithInstance(instLegacy, true)
+
+	// 2. Structured label format with host:port upstream and no network interfaces / IP.
+	instStructured := iutil.NewInstance(true, map[string]string{
+		"user.label.caddy.0.domain":   "structured.example.com",
+		"user.label.caddy.0.upstream": "192.0.2.11:8080",
+	}, nil, nil)
+	evStructured := iutil.NewEvent(now, "instance-started", "default", "app-struct", "").WithInstance(instStructured, true)
+
+	vhosts := extractVhosts(nil, "caddy", []*iutil.Event{evLegacy, evStructured})
+	require.Len(t, vhosts, 2)
+
+	require.Equal(t, "app.example.com", vhosts[0].Domain)
+	require.Equal(t, []string{"192.0.2.10:8080"}, vhosts[0].Upstreams)
+
+	require.Equal(t, "structured.example.com", vhosts[1].Domain)
+	require.Equal(t, []string{"192.0.2.11:8080"}, vhosts[1].Upstreams)
+}

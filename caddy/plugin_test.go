@@ -45,6 +45,20 @@ func TestPluginBasics(t *testing.T) {
 	require.Equal(t, ev, handled)
 }
 
+func TestPluginWants(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	p := New(logger, Config{})
+
+	wants := p.Wants()
+	actions := make([]string, 0, len(wants))
+	for _, w := range wants {
+		actions = append(actions, w.Action)
+	}
+
+	require.Contains(t, actions, "instance-shutdown")
+	require.Contains(t, actions, "instance-restarted")
+}
+
 func TestPluginProcessEvent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{

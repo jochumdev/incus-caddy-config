@@ -679,16 +679,16 @@ func processStructuredRoute(
 
 	ip := resolveIPv4(inst, network)
 	var upstream string
-	if ip != "" && redirectURL == "" {
+	if redirectURL == "" {
 		if route.upstream != "" {
 			if route.upstream != "false" && route.upstream != "none" {
 				if strings.Contains(route.upstream, ":") {
 					upstream = route.upstream
-				} else {
+				} else if ip != "" {
 					upstream = fmt.Sprintf("%s:%s", ip, route.upstream)
 				}
 			}
-		} else {
+		} else if ip != "" {
 			upstream = ip
 		}
 	}
@@ -961,20 +961,18 @@ func extractVhosts(logger *slog.Logger, targetLabel string, instances []*iutil.E
 		ip := resolveIPv4(inst, network)
 		var upstream string
 		upstreamVal, hasUpstream := domainFlags["upstream"]
-		if ip != "" {
-			if hasUpstream {
-				if upstreamVal != "" && upstreamVal != "true" {
-					if strings.Contains(upstreamVal, ":") {
-						upstream = upstreamVal
-					} else {
-						upstream = fmt.Sprintf("%s:%s", ip, upstreamVal)
-					}
-				} else if upstreamVal != "false" && upstreamVal != "none" {
-					upstream = ip
+		if hasUpstream {
+			if upstreamVal != "" && upstreamVal != "true" {
+				if strings.Contains(upstreamVal, ":") {
+					upstream = upstreamVal
+				} else if ip != "" {
+					upstream = fmt.Sprintf("%s:%s", ip, upstreamVal)
 				}
-			} else if redirectURL == "" {
+			} else if upstreamVal != "false" && upstreamVal != "none" && ip != "" {
 				upstream = ip
 			}
+		} else if redirectURL == "" && ip != "" {
+			upstream = ip
 		}
 
 		tmpl := domainFlags["template"]
