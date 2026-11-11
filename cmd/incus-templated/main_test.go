@@ -11,12 +11,12 @@ import (
 
 	"github.com/lxc/incus-compose/incustrust"
 
-	"github.com/jochumdev/incus-caddy-config/caddy"
+	"github.com/jochumdev/incus-templated/templated"
 )
 
 func TestVersionCommand(t *testing.T) {
 	cmd := command()
-	err := cmd.Run(context.Background(), []string{"caddy-config", "version"})
+	err := cmd.Run(context.Background(), []string{"incus-templated", "version"})
 	require.NoError(t, err)
 }
 
@@ -40,10 +40,9 @@ func TestRunCommandFlags(t *testing.T) {
 		"--restricted",
 		"--project", "alpha",
 		"--project", "beta",
-		"--caddy-instance", "external,instance=caddy-prod,project=default,global_template=/etc/caddy/templates/global.caddyfile",
-		"--os-path", "path=/etc/caddy/Caddyfile",
-		"--os-path", "edge,path=/var/caddy/Caddyfile",
-		"--caddyfile-path", "/etc/caddy/Caddyfile",
+		"--target", "external,preset=caddy,instance=caddy-prod,project=default,tier=public",
+		"--target", "edge,path=/var/caddy/Caddyfile,template=edge.tmpl",
+		"--config", "/etc/incus-templated/config.yaml",
 		"--templates-dir", "/etc/caddy/templates",
 		"--debounce-window", "500ms",
 		"--http-address", ":9090",
@@ -69,23 +68,16 @@ func TestRunCommandFlags(t *testing.T) {
 	require.Equal(t, "/tmp/key.pem", cfg.ClientKey)
 	require.True(t, cfg.Restricted)
 	require.Equal(t, []string{"alpha", "beta"}, cfg.Projects)
-	require.Len(t, cfg.Targets, 1)
+	require.Len(t, cfg.Targets, 2)
 	require.Equal(t, "external", cfg.Targets[0].Label)
-	inst, _ := cfg.Targets[0].Flag("instance")
-	require.Equal(t, "caddy-prod", inst)
-	proj, _ := cfg.Targets[0].Flag("project")
-	require.Equal(t, "default", proj)
-	tmpl, _ := cfg.Targets[0].Flag("global_template")
-	require.Equal(t, "/etc/caddy/templates/global.caddyfile", tmpl)
-
-	require.Len(t, cfg.OSTargets, 2)
-	require.Equal(t, "caddy", cfg.OSTargets[0].Label)
-	p0, _ := cfg.OSTargets[0].Flag("path")
-	require.Equal(t, "/etc/caddy/Caddyfile", p0)
-	require.Equal(t, "edge", cfg.OSTargets[1].Label)
-	p1, _ := cfg.OSTargets[1].Flag("path")
-	require.Equal(t, "/var/caddy/Caddyfile", p1)
-	require.Equal(t, "/etc/caddy/Caddyfile", cfg.CaddyfilePath)
+	require.Equal(t, "caddy", cfg.Targets[0].Preset)
+	require.Equal(t, "caddy-prod", cfg.Targets[0].Instance)
+	require.Equal(t, "default", cfg.Targets[0].Project)
+	require.Equal(t, map[string]string{"tier": "public"}, cfg.Targets[0].Flags)
+	require.Equal(t, "edge", cfg.Targets[1].Label)
+	require.Equal(t, "/var/caddy/Caddyfile", cfg.Targets[1].Path)
+	require.Equal(t, "edge.tmpl", cfg.Targets[1].Template)
+	require.Equal(t, "/etc/incus-templated/config.yaml", cfg.ConfigFile)
 	require.Equal(t, "/etc/caddy/templates", cfg.TemplatesDir)
 	require.Equal(t, 500*time.Millisecond, cfg.DebounceWindow)
 	require.Equal(t, ":9090", cfg.HTTPAddr)
@@ -115,8 +107,8 @@ func TestDrainContext(t *testing.T) {
 func TestRunNoCredentials(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
-		Targets: []caddy.Target{
-			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+		Targets: []templated.Target{
+			{Label: "caddy", Project: "default", Instance: "caddy"},
 		},
 	}
 
@@ -127,8 +119,8 @@ func TestRunNoCredentials(t *testing.T) {
 func TestRunAssembleError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
-		Targets: []caddy.Target{
-			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+		Targets: []templated.Target{
+			{Label: "caddy", Project: "default", Instance: "caddy"},
 		},
 		Exclude: []string{"caddy"},
 	}
@@ -143,8 +135,8 @@ func TestRunContextCanceled(t *testing.T) {
 	cancel()
 
 	args := &mainActionArgs{
-		Targets: []caddy.Target{
-			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+		Targets: []templated.Target{
+			{Label: "caddy", Project: "default", Instance: "caddy"},
 		},
 		IncusURL: "https://127.0.0.1:1",
 		Token:    "dummy-token",
@@ -159,15 +151,15 @@ func TestRunCommandValidationFailure(t *testing.T) {
 	cfg := newConfig()
 	cmd := runCommand(cfg)
 
-	// Running without --caddy-instance or --os-path must fail validation.
+	// Running without any --target must fail validation.
 	err := cmd.Run(context.Background(), []string{"run"})
-	require.ErrorContains(t, err, "at least one --caddy-instance or --os-path must be specified")
+	require.ErrorContains(t, err, "at least one --target must be specified")
 }
 
 func TestMainAction(t *testing.T) {
 	args := &mainActionArgs{
-		Targets: []caddy.Target{
-			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+		Targets: []templated.Target{
+			{Label: "caddy", Project: "default", Instance: "caddy"},
 		},
 		Log: "INFO",
 	}
@@ -177,11 +169,11 @@ func TestMainAction(t *testing.T) {
 }
 
 func TestRunCommandPluralEnvVars(t *testing.T) {
-	t.Setenv("INCUS_CADDY_SERVER_FINGERPRINT", "fp-from-env")
-	t.Setenv("INCUS_CADDY_PROJECTS", "p1,p2")
-	t.Setenv("INCUS_CADDY_INSTANCES", "edge,instance=caddy-1,project=default internal,instance=caddy-2,project=default")
-	t.Setenv("INCUS_CADDY_OS_PATHS", "path=/etc/caddy/Caddyfile,edge,path=/var/caddy/Caddyfile")
-	t.Setenv("INCUS_CADDY_EXCLUDES", "http,debounce")
+	t.Setenv("INCUS_TEMPLATED_SERVER_FINGERPRINT", "fp-from-env")
+	t.Setenv("INCUS_TEMPLATED_PROJECTS", "p1,p2")
+	t.Setenv("INCUS_TEMPLATED_TARGETS", "edge,instance=caddy-1,project=default internal,path=/etc/caddy/Caddyfile")
+	t.Setenv("INCUS_TEMPLATED_CONFIG", "/etc/incus-templated/config.yaml")
+	t.Setenv("INCUS_TEMPLATED_EXCLUDES", "http,debounce")
 
 	cfg := newConfig()
 	cmd := runCommand(cfg)
@@ -196,8 +188,6 @@ func TestRunCommandPluralEnvVars(t *testing.T) {
 	require.Len(t, cfg.Targets, 2)
 	require.Equal(t, "edge", cfg.Targets[0].Label)
 	require.Equal(t, "internal", cfg.Targets[1].Label)
-	require.Len(t, cfg.OSTargets, 2)
-	require.Equal(t, "caddy", cfg.OSTargets[0].Label)
-	require.Equal(t, "edge", cfg.OSTargets[1].Label)
+	require.Equal(t, "/etc/incus-templated/config.yaml", cfg.ConfigFile)
 	require.Equal(t, []string{"http", "debounce"}, cfg.Exclude)
 }

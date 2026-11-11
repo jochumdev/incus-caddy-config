@@ -5,17 +5,17 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/jochumdev/incus-caddy-config/caddy"
+	"github.com/jochumdev/incus-templated/templated"
 )
 
-type TargetFlag = cli.FlagBase[[]caddy.Target, cli.NoConfig, targetValue]
+type TargetFlag = cli.FlagBase[[]templated.Target, cli.NoConfig, targetValue]
 
 type targetValue struct {
-	destination *[]caddy.Target
+	destination *[]templated.Target
 	hasBeenSet  bool
 }
 
-func (t targetValue) Create(val []caddy.Target, p *[]caddy.Target, _ cli.NoConfig) cli.Value {
+func (t targetValue) Create(val []templated.Target, p *[]templated.Target, _ cli.NoConfig) cli.Value {
 	*p = val
 
 	return &targetValue{
@@ -23,7 +23,7 @@ func (t targetValue) Create(val []caddy.Target, p *[]caddy.Target, _ cli.NoConfi
 	}
 }
 
-func (t targetValue) ToString(val []caddy.Target) string {
+func (t targetValue) ToString(val []templated.Target) string {
 	strs := make([]string, 0, len(val))
 	for _, target := range val {
 		strs = append(strs, target.String())
@@ -33,13 +33,13 @@ func (t targetValue) ToString(val []caddy.Target) string {
 }
 
 func (t *targetValue) Set(val string) error {
-	targets, err := caddy.ParseTargets(val)
+	targets, err := templated.ParseTargets(val)
 	if err != nil {
 		return err
 	}
 
 	if !t.hasBeenSet {
-		*t.destination = []caddy.Target{}
+		*t.destination = []templated.Target{}
 		t.hasBeenSet = true
 	}
 

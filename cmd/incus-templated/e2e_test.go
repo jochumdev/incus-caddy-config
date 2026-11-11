@@ -12,17 +12,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/jochumdev/incus-caddy-config/caddy"
+	"github.com/jochumdev/incus-templated/templated"
 )
 
 func skipE2E(t *testing.T) {
 	t.Helper()
 
-	if os.Getenv("TEST_LOCAL") != "" || os.Getenv("INCUS_CADDY_TEST_LOCAL") != "" || os.Getenv("INCUS_COMPOSE_TEST_LOCAL") != "" {
+	if os.Getenv("TEST_LOCAL") != "" || os.Getenv("INCUS_TEMPLATED_TEST_LOCAL") != "" || os.Getenv("INCUS_COMPOSE_TEST_LOCAL") != "" {
 		t.Skip("skipping E2E test in local mode")
 	}
 
-	if os.Getenv("TEST_E2E") == "" && os.Getenv("INCUS_CADDY_TEST_E2E") == "" && os.Getenv("INCUS_COMPOSE_TEST_E2E") == "" {
+	if os.Getenv("TEST_E2E") == "" && os.Getenv("INCUS_TEMPLATED_TEST_E2E") == "" && os.Getenv("INCUS_COMPOSE_TEST_E2E") == "" {
 		t.Skip("skipping E2E test: run with just test-e2e or set TEST_E2E=1")
 	}
 }
@@ -86,7 +86,12 @@ func TestE2ECaddyReverseProxy(t *testing.T) {
 	defer configCancel()
 
 	cfg := newConfig()
-	cfg.Targets = []caddy.Target{caddy.NewTarget("edge", map[string]string{"project": project, "instance": "caddy"})}
+	// A second target on the same label with no commands: what a Prometheus file_sd consumer needs.
+	sdPath := filepath.Join(t.TempDir(), "sd", "targets.json")
+	cfg.Targets = []templated.Target{
+		{Label: "edge", Preset: "caddy", Project: project, Instance: "caddy"},
+		{Label: "edge", Path: sdPath, Text: `[{{ range $i, $inst := .Instances }}{{ if $i }},{{ end }}{{ json $inst.Name }}{{ end }}]`},
+	}
 	cfg.Projects = []string{project}
 	cfg.Remote = incusRemote()
 	cfg.UseRemote = true
@@ -110,7 +115,7 @@ func TestE2ECaddyReverseProxy(t *testing.T) {
 	}()
 
 	// 1. Verify Caddyfile is deployed with reverse_proxy and both api upstreams.
-	t.Log("waiting for caddy-config to deploy Caddyfile with both upstreams")
+	t.Log("waiting for incus-templated to deploy Caddyfile with both upstreams")
 	require.Eventually(t, func() bool {
 		caddyfile, readErr := runCompose(ctx, t, project, fixture, "exec", "-T", "caddy", "cat", "/config/Caddyfile")
 		if readErr != nil {
@@ -123,6 +128,13 @@ func TestE2ECaddyReverseProxy(t *testing.T) {
 
 		return strings.Contains(caddyfile, "api.example.test") && strings.Count(caddyfile, ":8080") == 2
 	}, 45*time.Second, 2*time.Second, "Caddyfile was not reconciled with two upstreams")
+
+	t.Log("verifying the command-less target landed on the host")
+	require.Eventually(t, func() bool {
+		sd, readErr := os.ReadFile(sdPath)
+
+		return readErr == nil && string(sd) == `["api1","api2"]`
+	}, 15*time.Second, time.Second, "targets.json was not rendered")
 
 	// 2. Verify HTTP reverse proxying works and reaches a busybox API server.
 	t.Log("verifying HTTP reverse proxying through Caddy")
@@ -145,7 +157,7 @@ func TestE2ECaddyReverseProxy(t *testing.T) {
 	out, err = runCompose(ctx, t, project, fixture, "stop", "api1")
 	require.NoError(t, err, "stopping api1 failed: %s", out)
 
-	t.Log("waiting for caddy-config to reconcile to single upstream api2")
+	t.Log("waiting for incus-templated to reconcile to single upstream api2")
 	require.Eventually(t, func() bool {
 		caddyfile, readErr := runCompose(ctx, t, project, fixture, "exec", "-T", "caddy", "cat", "/config/Caddyfile")
 		if readErr != nil {
@@ -171,7 +183,7 @@ func TestE2ECaddyReverseProxy(t *testing.T) {
 	out, err = runCompose(ctx, t, project, fixture, "start", "api1")
 	require.NoError(t, err, "starting api1 failed: %s", out)
 
-	t.Log("waiting for caddy-config to reconcile back to two upstreams")
+	t.Log("waiting for incus-templated to reconcile back to two upstreams")
 	require.Eventually(t, func() bool {
 		caddyfile, readErr := runCompose(ctx, t, project, fixture, "exec", "-T", "caddy", "cat", "/config/Caddyfile")
 		if readErr != nil {
