@@ -1,10 +1,10 @@
-# Building and running caddy-config.
+# Building and running incus-templated.
 
-# Build binary into bin/caddy-config
+# Build binary into bin/incus-templated
 build:
     @mkdir -p bin
-    go build -o bin/caddy-config ./cmd/caddy-config
+    go build -o bin/incus-templated ./cmd/incus-templated
 
-# Run caddy-config directly
+# Run incus-templated directly
 run *args:
-    @go run ./cmd/caddy-config {{ args }}
+    @go run ./cmd/incus-templated {{ args }}

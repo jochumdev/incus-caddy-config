@@ -1,25 +1,138 @@
 ---
-description: Guide to customizing Caddyfile site blocks using inline Go templates and external template files.
+description: The data every target template sees, the template funcs, and the Caddy preset with its per-vhost templates.
 editor: markdown
 published: true
-title: Custom Vhost Templates
+title: Templates
 leafwiki_id: ICZjDP_vg
-leafwiki_title: Custom Vhost Templates
+leafwiki_title: Templates
 leafwiki_created_at: "2026-09-15T22:05:21Z"
 leafwiki_updated_at: "2026-09-15T22:05:21Z"
 leafwiki_creator_id: system
 leafwiki_last_author_id: system
 ---
 
-# Custom Vhost Templates
+# Templates
 
-`caddy-config` uses Go's `text/template` engine to render site blocks. While standard reverse proxying and redirects work out-of-the-box, you can customize the entire site block for any instance.
+Every target renders one Go [`text/template`](https://pkg.go.dev/text/template) into one file. A target names its template with `template=<file>` (resolved against `--templates-dir` unless absolute) or takes one from a preset (`preset=caddy`). Templates are read once at startup.
 
 ---
 
-## Default Vhost Template
+## Template Data
 
-When an instance has no custom `template` label, `caddy-config` applies the default vhost template (`defaultVhostTemplate`):
+The template is executed with:
+
+| Field | Type | Description |
+|---|---|---|
+| `.Label` | `string` | The target's label. |
+| `.Flags` | `map[string]string` | The target's own extra `key=value` options (e.g. `job=incus`). |
+| `.Instances` | `[]Instance` | Every **running** instance carrying the label, sorted by project, then name. |
+
+Each `Instance`:
+
+| Field | Type | Description |
+|---|---|---|
+| `.Name` | `string` | Instance name. |
+| `.Project` | `string` | Incus project. |
+| `.Location` | `string` | Cluster member the instance runs on; empty off a cluster. |
+| `.Label` | `string` | Value of `user.label.<label>`. |
+| `.Labels` | `map[string]string` | Keys below the label with the prefix cut: `user.label.prom.port` is `.Labels.port`. |
+| `.Config` | `map[string]string` | Full expanded configuration, without `volatile.*` keys. |
+| `.Devices` | `map[string]map[string]string` | Expanded devices by name. |
+| `.Interfaces` | `[]Interface` | One per NIC: `.Network`, `.Project`, `.IPv4`, `.IPv6`. |
+| `.IPv4 "<network>"` | method | First non-loopback IPv4 on that network, or on any network when it has none; `.IPv4 ""` for any. |
+
+A label change, an address change, or a move to another cluster member re-renders the target.
+
+A label or flag an instance or target does not carry renders as an empty string, so `{{ .Labels.port }}` on an instance without `port` gives nothing rather than `<no value>`. Test for it with `{{ if .Labels.port }}`.
+
+## Template Funcs
+
+Besides the Go built-ins (`index`, `printf`, `len`, `range`, ...):
+
+| Func | Description |
+|---|---|
+| `json <value>` | JSON-encode a value: `{{ json .Name }}` gives `"web-1"`. |
+| `join <list> <sep>` | `strings.Join`. |
+| `split <string> <sep>` | `strings.Split`. |
+| `vhosts .` | Caddy: group the instances into site blocks (see [Caddy Preset](#caddy-preset)). |
+| `vhost <v>` | Caddy: render one site block. |
+
+---
+
+## Examples
+
+### Prometheus `file_sd`
+
+Prometheus watches the file itself, so the target needs no commands:
+
+```bash
+incus-templated run --templates-dir /etc/incus-templated/templates \
+  --target prom,path=/etc/prometheus/sd/incus.json,template=file_sd.json.tmpl,job=incus
+```
+
+```text
+{{/* /etc/incus-templated/templates/file_sd.json.tmpl */}}
+[
+{{- range $i, $inst := .Instances }}{{ if $i }},{{ end }}
+  {
+    "targets": [{{ json (printf "%s:%s" ($inst.IPv4 "") $inst.Labels.port) }}],
+    "labels": {
+      "job": {{ json $.Flags.job }},
+      "instance": {{ json $inst.Name }},
+      "project": {{ json $inst.Project }},
+      "location": {{ json $inst.Location }}
+    }
+  }
+{{- end }}
+]
+```
+
+```yaml
+services:
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    labels:
+      prom: ""
+      prom.port: "9100"
+```
+
+### Upstreams on the cluster member's address
+
+When instances sit on a per-member NAT bridge and are reached through a proxy device on the member's address, the upstream depends on where the instance runs. `.Location` follows the instance across members, so the mapping lives in the template. Keep the member addresses on the target as flags (`member.node1=10.0.0.11`) and look them up by location:
+
+```text
+{{- range .Instances }}
+{{ .Labels.domain }} {
+	reverse_proxy {{ index $.Flags (printf "member.%s" .Location) }}:{{ .Labels.upstream }}
+}
+{{- end }}
+```
+
+```bash
+--target edge,path=/etc/caddy/Caddyfile,template=members.caddyfile,format='caddy fmt --overwrite {staging}',reload='caddy reload --config {path}',member.node1=10.0.0.11,member.node2=10.0.0.12
+```
+
+---
+
+## Caddy Preset
+
+`preset=caddy` renders this template (see [Configuration](configuration#presets) for the commands it sets):
+
+```caddyfile
+{
+	admin localhost:2019
+}
+{{- range vhosts . }}
+
+{{ vhost . }}
+{{- end }}
+```
+
+`vhosts .` reads the target's instances with the [label rules](labels): domains, `upstream=`, `network=`, `redir=`, redirection domains, structured `.N.` routes, and load balancing across instances sharing a domain. `vhost` renders one site block with the block's own `template=` or the default below.
+
+To change the global options block, copy the template above into your own file and point the target at it: `--target edge,preset=caddy,instance=caddy,project=default,template=edge.caddyfile`. The preset still provides the commands.
+
+### Default Vhost Template
 
 ```caddyfile
 {{ .Domain }} {
@@ -31,71 +144,9 @@ When an instance has no custom `template` label, `caddy-config` applies the defa
 }
 ```
 
----
+### Vhost Variables
 
-## Default Global Template & Customization
-
-By default, `caddy-config` prepends a minimal global options block (`defaultBaseTemplate`) to every rendered Caddyfile:
-
-```caddyfile
-{
-	admin localhost:2019
-}
-```
-
-You can overwrite this block to configure global settings such as TLS certificates, global logging, email, acme CA endpoints, or trusted proxies.
-
-### Specifying a Global Template (`global_template`)
-
-You specify a custom global template directly on each target using the `global_template=<path>` option within `--caddy-instance` or `--os-path`.
-
-Relative paths and template names are resolved against `--templates-dir` (or the `INCUS_CADDY_TEMPLATES_DIR` environment variable) if specified, with optional `.caddyfile` or `.tmpl` extensions. Absolute paths are also supported directly.
-
-**As a template name in `--templates-dir`:**
-```bash
-caddy-config run \
-  --templates-dir /etc/caddy/templates \
-  --caddy-instance external,instance=caddy-external,project=default,global_template=external.caddyfile \
-  --caddy-instance internal,instance=caddy-internal,project=default,global_template=internal.caddyfile
-```
-
-**As an absolute file path:**
-```bash
-caddy-config run \
-  --caddy-instance edge,instance=caddy,project=default,global_template=/etc/caddy/global.caddyfile
-```
-
-**Co-located OS deployment:**
-```bash
-caddy-config run \
-  --os-path edge,path=/etc/caddy/Caddyfile,global_template=/etc/caddy/global.caddyfile
-```
-
-Any deployment target that does not configure `global_template` uses the default minimal options block (`{ admin localhost:2019 }`).
-
-### Global Template Context Variables
-
-The global template is evaluated with Go's `text/template` engine and has access to:
-
-| Variable | Type | Description |
-|---|---|---|
-| `.Vhosts` | `[]vhost` | List of all virtual hosts configured for this deployment target. |
-
-Example:
-```caddyfile
-{
-	admin localhost:2019
-	{{- if .Vhosts }}
-	# Configured for {{ len .Vhosts }} active routes
-	{{- end }}
-}
-```
-
----
-
-## Template Context Variables
-
-Inside your custom template, the following fields are available:
+A per-vhost template is executed with one site block:
 
 | Variable | Type | Description |
 |---|---|---|
@@ -108,15 +159,15 @@ Inside your custom template, the following fields are available:
 
 ---
 
-## Defining Custom Templates
+### Per-Vhost Templates
 
 Custom templates are specified directly on the target label using the `template=<value>` flag:
 
-### 1. External Template Directory (`--templates-dir`)
+#### From the templates directory
 
-For reusable site configurations, store templates in a directory mounted to `caddy-config` and pass `--templates-dir /etc/caddy/templates`.
+For reusable site configurations, store templates in a directory mounted to `incus-templated` and pass `--templates-dir /etc/caddy/templates`.
 
-When an instance specifies a valid path with an extension (dir+file+ext, e.g. `template=spa_site.caddyfile` or `template=spa_site.tmpl`), `caddy-config` resolves it against `--templates-dir` (or uses an absolute path if provided). If the file does not exist, it fails with a 404/not-found error.
+When an instance specifies a valid path with an extension (dir+file+ext, e.g. `template=spa_site.caddyfile` or `template=spa_site.tmpl`), `incus-templated` resolves it against `--templates-dir` (or uses an absolute path if provided). If the file does not exist, rendering fails and the live Caddyfile stays as it is.
 
 ```yaml
 services:
@@ -126,7 +177,7 @@ services:
       edge: "spa.example.com,upstream=8080,template=spa_site.caddyfile"
 ```
 
-### 2. Inline Go Template
+#### Inline
 
 Any template input without a file extension is evaluated as an inline Go template:
 
@@ -144,9 +195,9 @@ services:
 
 ---
 
-## Production Template Examples
+### Per-Vhost Examples
 
-### Example 1: Compression and Security Headers
+#### Example 1: Compression and Security Headers
 
 ```caddyfile
 # /etc/caddy/templates/secure_proxy.caddyfile
@@ -175,7 +226,7 @@ services:
 
 ---
 
-### Example 2: Static Files with Reverse Proxy Fallback
+#### Example 2: Static Files with Reverse Proxy Fallback
 
 Useful for single-page applications (React, Vue) or microservices serving static assets:
 
@@ -195,7 +246,7 @@ Useful for single-page applications (React, Vue) or microservices serving static
 
 ---
 
-### Example 3: PHP-FPM FastCGI Site
+#### Example 3: PHP-FPM FastCGI Site
 
 Connects directly to an upstream PHP container running `php-fpm`:
 
@@ -219,7 +270,7 @@ services:
 
 ---
 
-### Example 4: WebSockets & Long-Lived Streaming
+#### Example 4: WebSockets & Long-Lived Streaming
 
 Optimized for real-time applications requiring continuous flushes and keep-alives:
 
@@ -234,12 +285,11 @@ Optimized for real-time applications requiring continuous flushes and keep-alive
 
 ---
 
-## Template Validation & Formatting Safety
+## Validation Safety
 
-Every custom template is rendered in-memory and formatted/validated using the Caddy binary inside the container (`caddy fmt --overwrite`) before deployment.
+Every rendered file is written to `<path>.tmp` and checked by the target's `format` and `validate` commands before it replaces the live file. With the Caddy preset that is `caddy fmt` and `caddy validate`, run inside the Caddy container.
 
-If a custom template contains an invalid directive, bad syntax, or broken structure:
-1. `caddy fmt` fails inside the container.
-2. `caddy-config` logs the exact error returned by Caddy.
-3. The invalid temporary file is discarded.
-4. **Caddy continues serving the existing, working configuration without interruption.**
+If either fails:
+1. `incus-templated` logs the command's output.
+2. The live file is not touched; the `.tmp` file is left for inspection.
+3. **The consumer keeps serving the existing, working configuration.**

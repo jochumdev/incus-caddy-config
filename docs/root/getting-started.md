@@ -1,5 +1,5 @@
 ---
-description: Quickstart guide to running Caddy and caddy-config on Incus with automated reverse proxying.
+description: Quickstart guide to running Caddy and incus-templated on Incus with automated reverse proxying.
 editor: markdown
 published: true
 tags: []
@@ -14,7 +14,7 @@ leafwiki_last_author_id: zyZjvP_vg
 
 # Getting Started
 
-This guide walks through deploying Caddy alongside `caddy-config` on Incus using `incus-compose`.
+This guide walks through deploying Caddy alongside `incus-templated` on Incus using `incus-compose`.
 
 ---
 
@@ -27,10 +27,10 @@ This guide walks through deploying Caddy alongside `caddy-config` on Incus using
 
 ## Step 1: Generate an Incus Trust Token
 
-`caddy-config` communicates with the Incus daemon over HTTPS. You can enroll it using a one-time trust token:
+`incus-templated` communicates with the Incus daemon over HTTPS. You can enroll it using a one-time trust token:
 
 ```bash
-incus config trust add caddy-config
+incus config trust add incus-templated
 ```
 
 Incus outputs a trust token (e.g. `eyJzZXJ2ZXJfbmFtZSI6...`). Save this token into a `.env` file in the same directory as your `compose.yaml`:
@@ -45,7 +45,7 @@ echo "INCUS_TOKEN=eyJzZXJ2ZXJfbmFtZSI6..." > .env
 
 ## Step 2: Define `compose.yaml`
 
-Create a `compose.yaml` file defining the Caddy proxy and `caddy-config`:
+Create a `compose.yaml` file defining the Caddy proxy and `incus-templated`:
 
 ```yaml
 services:
@@ -61,8 +61,8 @@ services:
     command: |
       sh -c 'if [ ! -f /config/Caddyfile ]; then echo -e "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile; fi; exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
-  caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
+  incus-templated:
+    image: ghcr.io/jochumdev/incus-templated/incus-templated:1.0.0-beta.1
     restart: unless-stopped
     depends_on:
       caddy:
@@ -70,15 +70,15 @@ services:
     # ports:
     #   - "9153:9153"
     environment:
-      INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
-      INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_INSTANCES: "edge,instance=caddy,project=default"
-      INCUS_CADDY_HTTP_ADDRESS: ":9153"
-      INCUS_CADDY_LOG: "INFO"
+      INCUS_TEMPLATED_INCUS: "${INCUS_TEMPLATED_INCUS:-https://10.0.1.1:8443}"
+      INCUS_TEMPLATED_DATA_DIR: /var/lib/incus-templated
+      INCUS_TEMPLATED_TARGETS: "edge,preset=caddy,instance=caddy,project=default"
+      INCUS_TEMPLATED_HTTP_ADDRESS: ":9153"
+      INCUS_TEMPLATED_LOG: "INFO"
     secrets:
       - token
     volumes:
-      - caddy-config:/var/lib/caddy-config
+      - incus-templated:/var/lib/incus-templated
 
 secrets:
   token:
@@ -87,7 +87,7 @@ secrets:
 volumes:
   config:
   data:
-  caddy-config:
+  incus-templated:
 ```
 
 Launch the stack:
@@ -98,9 +98,9 @@ incus-compose up -d
 
 On first start:
 
-1. `caddy-config` reads the secret token from `/run/secrets/token`.
+1. `incus-templated` reads the secret token from `/run/secrets/token`.
 2. It generates a client TLS certificate and enrolls it with the Incus API.
-3. The enrolled certificate is persisted in the `config-data` volume at `/var/lib/caddy-config/client.crt` and `client.key`. Future restarts reuse the certificate without requiring a token.
+3. The enrolled certificate is persisted in the `config-data` volume at `/var/lib/incus-templated/client.crt` and `client.key`. Future restarts reuse the certificate without requiring a token.
 
 ---
 
@@ -123,7 +123,7 @@ Deploy the service:
 incus-compose up -d api
 ```
 
-`caddy-config` immediately catches the `instance-started` event, resolves the instance's bridge IP address, writes the updated configuration directly to the `caddy-config` storage volume, validates syntax inside Caddy, and executes a reload.
+`incus-templated` immediately catches the `instance-started` event, resolves the instance's bridge IP address, writes the updated configuration directly to the `incus-templated` storage volume, validates syntax inside Caddy, and executes a reload.
 
 Verify that Caddy routes traffic to the new service:
 
@@ -135,7 +135,7 @@ curl -H "Host: api.example.test" http://127.0.0.1/
 
 ## Step 4: Verify Readiness and Health
 
-`caddy-config` exposes observability endpoints on port `9153`:
+`incus-templated` exposes observability endpoints on port `9153`:
 
 - **Liveness** (`GET http://localhost:9153/health`): Returns HTTP 200 once the HTTP server is listening.
 - **Readiness** (`GET http://localhost:9153/ready`):
@@ -150,21 +150,21 @@ curl -i http://localhost:9153/ready
 
 ## Alternative: Co-located Deployment on Host or VM
 
-If you run Caddy directly on the host OS or inside a VM alongside `caddy-config`, use `--os-path` instead of `--caddy-instance`:
+If you run Caddy directly on the host OS or inside a VM alongside `incus-templated`, give the target a `path=` instead of `instance=` and `project=`:
 
 ```bash
 # Listen to Incus and update local Caddyfile directly
-caddy-config run \
-  --os-path edge,path=/etc/caddy/Caddyfile \
+incus-templated run \
+  --target edge,preset=caddy,path=/etc/caddy/Caddyfile \
   --remote default
 ```
 
-`caddy-config` validates the syntax and reloads the local Caddy daemon directly on the host filesystem.
+`incus-templated` validates the syntax and reloads the local Caddy daemon directly on the host filesystem.
 
 ---
 
 ## Next Steps
 
-- Explore label options in [Instance Labels & Routing](/labels).
-- Customize reverse proxy blocks in [Custom Vhost Templates](/templates).
+- Explore label options in [Caddy Labels & Routing](/labels).
+- Render anything else, or customize reverse proxy blocks, in [Templates](/templates).
 - Review all configuration options in [Configuration Reference](/configuration).

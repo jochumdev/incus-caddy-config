@@ -14,12 +14,12 @@ ARG VERSION=dev
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -tags=netgo -ldflags="-w -s -X main.version=${VERSION}" -trimpath -o /out/caddy-config ./cmd/caddy-config && \
-    /out/caddy-config version && \
-    /out/caddy-config run --help > /dev/null
+    CGO_ENABLED=0 go build -tags=netgo -ldflags="-w -s -X main.version=${VERSION}" -trimpath -o /out/incus-templated ./cmd/incus-templated && \
+    /out/incus-templated version && \
+    /out/incus-templated run --help > /dev/null
 
 FROM ${BASE}
-COPY --from=build /out/caddy-config /usr/local/bin/caddy-config
+COPY --from=build /out/incus-templated /usr/local/bin/incus-templated
 
 WORKDIR /
 
@@ -28,4 +28,4 @@ EXPOSE 9153
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --quiet --spider http://127.0.0.1:9153/ready || exit 1
 
-CMD ["caddy-config", "run"]
+CMD ["incus-templated", "run"]

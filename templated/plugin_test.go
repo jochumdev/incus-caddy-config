@@ -1,4 +1,4 @@
-package caddy
+package templated
 
 import (
 	"context"
@@ -15,17 +15,18 @@ import (
 	"github.com/lxc/incus-compose/ievent/iutil"
 )
 
+const listTmpl = "{{ range .Instances }}{{ .Label }}\n{{ end }}"
+
 func TestPluginBasics(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := Config{
 		Targets: []Target{
-			NewTarget("caddy1", map[string]string{"project": "default", "instance": "caddy-ext"}),
+			{Label: "caddy1", Project: "default", Instance: "caddy-ext", Path: "/config/Caddyfile", Text: listTmpl},
 		},
-		CaddyfilePath: "/config/Caddyfile",
 	}
 
 	p := New(logger, cfg)
-	require.Equal(t, "caddy", p.Name())
+	require.Equal(t, "templated", p.Name())
 
 	wants := p.Wants()
 	require.NotEmpty(t, wants)
@@ -63,25 +64,25 @@ func TestPluginProcessEvent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
+			{Label: "caddy", Project: "default", Instance: "caddy-ext", Path: "/config/Caddyfile", Text: listTmpl},
 		},
 	})
 
 	now := time.Now()
 
 	// Unrelated instance without matching labels is ignored.
-	unrelatedInst := iutil.NewInstance(true, map[string]string{
+	unrelatedInst := iutil.NewInstance(true, "", map[string]string{
 		"user.label.other": "example.org",
-	}, nil, nil)
+	}, nil, nil, nil)
 	unrelatedEv := iutil.NewEvent(now, "instance-started", "default", "db-1", "").WithInstance(unrelatedInst, true)
 	ctx := context.Background()
 	p.processEvent(ctx, unrelatedEv)
 	require.NotContains(t, p.instances, "default/db-1")
 
 	// Matching instance is tracked.
-	inst := iutil.NewInstance(true, map[string]string{
+	inst := iutil.NewInstance(true, "", map[string]string{
 		"user.label.caddy": "example.com",
-	}, nil, nil)
+	}, nil, nil, nil)
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-1", "").WithInstance(inst, true)
 
 	p.processEvent(ctx, ev)
@@ -94,7 +95,7 @@ func TestPluginProcessEvent(t *testing.T) {
 	require.Equal(t, iutil.ChainWarm, p.chain)
 
 	// Stopped instance removes it.
-	stoppedInst := iutil.NewInstance(false, nil, nil, nil)
+	stoppedInst := iutil.NewInstance(false, "", nil, nil, nil, nil)
 	stoppedEv := iutil.NewEvent(now, "instance-stopped", "default", "web-1", "").WithInstance(stoppedInst, true)
 	p.processEvent(ctx, stoppedEv)
 
@@ -116,7 +117,7 @@ func TestPluginRunCommandDrain(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
+			{Label: "caddy", Project: "default", Instance: "caddy-ext", Path: "/config/Caddyfile", Text: listTmpl},
 		},
 	})
 
@@ -130,9 +131,9 @@ func TestPluginRunCommandDrain(t *testing.T) {
 	require.NoError(t, err)
 
 	now := time.Now()
-	inst := iutil.NewInstance(true, map[string]string{
+	inst := iutil.NewInstance(true, "", map[string]string{
 		"user.label.caddy": "drain.example.com",
-	}, nil, nil)
+	}, nil, nil, nil)
 	ev := iutil.NewEvent(now, "instance-started", "default", "web-drain", "").WithInstance(inst, true)
 	p.Handle(ev)
 
@@ -223,7 +224,7 @@ func TestPluginProcessEventExtended(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
+			{Label: "caddy", Project: "default", Instance: "caddy-ext", Path: "/config/Caddyfile", Text: listTmpl},
 		},
 	})
 
@@ -231,9 +232,9 @@ func TestPluginProcessEventExtended(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Track an initial instance.
-	inst := iutil.NewInstance(true, map[string]string{
+	inst := iutil.NewInstance(true, "", map[string]string{
 		"user.label.caddy": "app.example.com",
-	}, nil, nil)
+	}, nil, nil, nil)
 	evOld := iutil.NewEvent(now, "instance-started", "default", "app-v1", "").WithInstance(inst, true)
 	p.processEvent(ctx, evOld)
 	require.Contains(t, p.instances, "default/app-v1")
@@ -251,7 +252,7 @@ func TestPluginProcessEventExtended(t *testing.T) {
 	require.Equal(t, iutil.ChainCold, p.chain)
 
 	// 4. Stopped event for an instance that was never tracked.
-	stoppedGhost := iutil.NewInstance(false, nil, nil, nil)
+	stoppedGhost := iutil.NewInstance(false, "", nil, nil, nil, nil)
 	evGhost := iutil.NewEvent(now, "instance-stopped", "default", "ghost", "").WithInstance(stoppedGhost, true)
 	p.processEvent(ctx, evGhost)
 	require.NotContains(t, p.instances, "default/ghost")
@@ -261,16 +262,15 @@ func TestPluginReconcileBranches(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	p := New(logger, Config{
 		Targets: []Target{
-			NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy-ext"}),
+			{Label: "caddy", Project: "default", Instance: "caddy-ext", Path: "/config/Caddyfile", Text: listTmpl},
 		},
-		CaddyfilePath: "/config/Caddyfile",
 	})
 	p.chain = iutil.ChainWarm
 
 	now := time.Now()
-	inst := iutil.NewInstance(true, map[string]string{
+	inst := iutil.NewInstance(true, "", map[string]string{
 		"user.label.caddy": "reconcile.example.com",
-	}, nil, nil)
+	}, nil, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst, true)
 
 	ctx := context.Background()
@@ -280,16 +280,16 @@ func TestPluginReconcileBranches(t *testing.T) {
 	p.Wait()
 
 	// 2. Hash matches lastDeployed: deployment is skipped.
-	targetKey := "default/caddy-ext"
+	targetKey := "default/caddy-ext:/config/Caddyfile"
 	p.deploy.lastDeployed[targetKey] = []byte("dummy-sha")
 
 	// 3. Template render error: handles failure gracefully and continues.
 	p.cfg.Targets = []Target{
-		NewTarget("broken", map[string]string{"project": "default", "instance": "caddy-ext"}),
+		{Label: "broken", Project: "default", Instance: "caddy-ext", Path: "/config/Caddyfile", Text: "{{ .Unclosed"},
 	}
-	brokenInst := iutil.NewInstance(true, map[string]string{
-		"user.label.broken": "broken.com,template={{ .Unclosed",
-	}, nil, nil)
+	brokenInst := iutil.NewInstance(true, "", map[string]string{
+		"user.label.broken": "broken.com",
+	}, nil, nil, nil)
 	p.instances["default/broken"] = iutil.NewEvent(now, "instance-started", "default", "broken", "").WithInstance(brokenInst, true)
 
 	p.reconcile(ctx)
@@ -299,40 +299,40 @@ func TestPluginReconcileBranches(t *testing.T) {
 func TestPluginHasTargetLabels(t *testing.T) {
 	p := New(nil, Config{
 		Targets: []Target{
-			NewTarget("web", map[string]string{"project": "default", "instance": "caddy"}),
+			{Label: "web", Project: "default", Instance: "caddy", Path: "/config/Caddyfile", Text: listTmpl},
 		},
 	})
 
 	require.False(t, p.hasTargetLabels(nil))
 
-	instNoLabels := iutil.NewInstance(true, map[string]string{}, nil, nil)
+	instNoLabels := iutil.NewInstance(true, "", map[string]string{}, nil, nil, nil)
 	require.False(t, p.hasTargetLabels(instNoLabels))
 
-	instOtherLabels := iutil.NewInstance(true, map[string]string{
+	instOtherLabels := iutil.NewInstance(true, "", map[string]string{
 		"user.label.db.port": "5432",
-	}, nil, nil)
+	}, nil, nil, nil)
 	require.False(t, p.hasTargetLabels(instOtherLabels))
 
-	instMatch := iutil.NewInstance(true, map[string]string{
+	instMatch := iutil.NewInstance(true, "", map[string]string{
 		"user.label.web": "site.lan",
-	}, nil, nil)
+	}, nil, nil, nil)
 	require.True(t, p.hasTargetLabels(instMatch))
 
 	// Backward compatibility with prefixed labels.
-	instPrefixMatch := iutil.NewInstance(true, map[string]string{
+	instPrefixMatch := iutil.NewInstance(true, "", map[string]string{
 		"user.label.web.domain": "site.lan",
-	}, nil, nil)
+	}, nil, nil, nil)
 	require.True(t, p.hasTargetLabels(instPrefixMatch))
 
-	// Match via OSTargets.
+	// Match via a second target.
 	pOS := New(nil, Config{
-		OSTargets: []Target{
-			NewTarget("local", map[string]string{"path": "/etc/caddy/Caddyfile"}),
+		Targets: []Target{
+			{Label: "local", Path: "/etc/caddy/Caddyfile", Text: listTmpl},
 		},
 	})
-	instOSMatch := iutil.NewInstance(true, map[string]string{
+	instOSMatch := iutil.NewInstance(true, "", map[string]string{
 		"user.label.local": "local.lan",
-	}, nil, nil)
+	}, nil, nil, nil)
 	require.True(t, pOS.hasTargetLabels(instOSMatch))
 }
 
@@ -349,15 +349,15 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	p := New(logger, Config{
-		OSTargets: []Target{
-			NewTarget("edge", map[string]string{"path": targetPath}),
+		Targets: []Target{
+			{Label: "edge", Path: targetPath, Text: listTmpl},
 		},
 	})
 
 	now := time.Now()
-	inst := iutil.NewInstance(true, map[string]string{
+	inst := iutil.NewInstance(true, "", map[string]string{
 		"user.label.edge": "app.test",
-	}, nil, nil)
+	}, nil, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst, true)
 
 	ctx := context.Background()
@@ -375,13 +375,13 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	// Reconcile with broken template: handles error gracefully.
 	brokenPath := filepath.Join(tmpDir, "BrokenCaddyfile")
 	pBroken := New(logger, Config{
-		OSTargets: []Target{
-			NewTarget("bad", map[string]string{"path": brokenPath}),
+		Targets: []Target{
+			{Label: "bad", Path: brokenPath, Text: "{{ .Unclosed"},
 		},
 	})
-	badInst := iutil.NewInstance(true, map[string]string{
-		"user.label.bad": "bad.test,template={{ .Unclosed",
-	}, nil, nil)
+	badInst := iutil.NewInstance(true, "", map[string]string{
+		"user.label.bad": "bad.test",
+	}, nil, nil, nil)
 	pBroken.instances["default/bad"] = iutil.NewEvent(now, "instance-started", "default", "bad", "").WithInstance(badInst, true)
 	pBroken.reconcile(ctx)
 	pBroken.Wait()
@@ -390,46 +390,27 @@ func TestPluginReconcileOSTarget(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 }
 
-func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
-	origExec := execCommand
-	defer func() { execCommand = origExec }()
-
-	execCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, "sh", "-c", "exit 0")
-	}
-
+func TestPluginReconcileRendersEachTargetWithItsOwnTemplate(t *testing.T) {
 	tmpDir := t.TempDir()
 	pathExt := filepath.Join(tmpDir, "external.Caddyfile")
 	pathInt := filepath.Join(tmpDir, "internal.Caddyfile")
-	tmplExtFile := filepath.Join(tmpDir, "external_global.caddyfile")
-	tmplIntFile := filepath.Join(tmpDir, "internal_global.caddyfile")
-	err := os.WriteFile(tmplExtFile, []byte("{\n\tadmin localhost:2019\n\t# external-global-header\n}"), 0600)
-	require.NoError(t, err)
-	err = os.WriteFile(tmplIntFile, []byte("{\n\tadmin localhost:2019\n\t# internal-global-header\n}"), 0600)
-	require.NoError(t, err)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	p := New(logger, Config{
-		OSTargets: []Target{
-			NewTarget("caddy-external", map[string]string{
-				"path":            pathExt,
-				"global_template": tmplExtFile,
-			}),
-			NewTarget("caddy-internal", map[string]string{
-				"path":            pathInt,
-				"global_template": tmplIntFile,
-			}),
+		Targets: []Target{
+			{Label: "caddy-external", Path: pathExt, Text: "# external-header\n" + listTmpl},
+			{Label: "caddy-internal", Path: pathInt, Text: "# internal-header\n" + listTmpl},
 		},
 	})
 
 	now := time.Now()
-	instExt := iutil.NewInstance(true, map[string]string{
+	instExt := iutil.NewInstance(true, "", map[string]string{
 		"user.label.caddy-external": "ext.example.com",
-	}, nil, nil)
-	instInt := iutil.NewInstance(true, map[string]string{
+	}, nil, nil, nil)
+	instInt := iutil.NewInstance(true, "", map[string]string{
 		"user.label.caddy-internal": "int.example.com",
-	}, nil, nil)
+	}, nil, nil, nil)
 
 	p.instances["default/ext"] = iutil.NewEvent(now, "instance-started", "default", "ext", "").WithInstance(instExt, true)
 	p.instances["default/int"] = iutil.NewEvent(now, "instance-started", "default", "int", "").WithInstance(instInt, true)
@@ -440,15 +421,11 @@ func TestPluginReconcileWithLabelPrefixedGlobalTemplates(t *testing.T) {
 
 	dataExt, err := os.ReadFile(pathExt)
 	require.NoError(t, err)
-	require.Contains(t, string(dataExt), "# external-global-header")
-	require.NotContains(t, string(dataExt), "# internal-global-header")
-	require.Contains(t, string(dataExt), "ext.example.com")
+	require.Equal(t, "# external-header\next.example.com\n", string(dataExt))
 
 	dataInt, err := os.ReadFile(pathInt)
 	require.NoError(t, err)
-	require.Contains(t, string(dataInt), "# internal-global-header")
-	require.NotContains(t, string(dataInt), "# external-global-header")
-	require.Contains(t, string(dataInt), "int.example.com")
+	require.Equal(t, "# internal-header\nint.example.com\n", string(dataInt))
 }
 
 func TestPluginRunDeployDoneAndCancel(t *testing.T) {
@@ -491,28 +468,28 @@ func TestPluginReconcileCancelsPreviousDeployment(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	p := New(logger, Config{
-		OSTargets: []Target{
-			NewTarget("edge", map[string]string{"path": targetPath}),
+		Targets: []Target{
+			{Label: "edge", Path: targetPath, Text: listTmpl},
 		},
 	})
 
 	now := time.Now()
-	inst1 := iutil.NewInstance(true, map[string]string{
+	inst1 := iutil.NewInstance(true, "", map[string]string{
 		"user.label.edge": "v1.example.com",
-	}, nil, nil)
+	}, nil, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-started", "default", "app", "").WithInstance(inst1, true)
 
 	ctx := context.Background()
 	p.reconcile(ctx)
 
-	targetKey := "os:edge:" + targetPath
+	targetKey := "os:" + targetPath
 	prevCancel, ok := p.deploy.cancels[targetKey]
 	require.True(t, ok)
 	require.NotNil(t, prevCancel)
 
-	inst2 := iutil.NewInstance(true, map[string]string{
+	inst2 := iutil.NewInstance(true, "", map[string]string{
 		"user.label.edge": "v2.example.com",
-	}, nil, nil)
+	}, nil, nil, nil)
 	p.instances["default/app"] = iutil.NewEvent(now, "instance-updated", "default", "app", "").WithInstance(inst2, true)
 
 	p.reconcile(ctx)

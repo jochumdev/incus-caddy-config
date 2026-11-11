@@ -1,4 +1,4 @@
-# Contributing to incus-caddy-config
+# Contributing to incus-templated
 
 Thank you for your interest in contributing! This document outlines the
 conventions and practices we follow.
@@ -51,7 +51,7 @@ not have yet.
 Before contributing, you **must** read and understand this document. It defines
 non-negotiable boundaries, including:
 
-- What incus-caddy-config will and will not implement
+- What incus-templated will and will not implement
 - How mapping to Incus is structured
 - Which layers are allowed to change behavior
 - Use Incus terms and simple English
@@ -62,18 +62,21 @@ feature completeness or test coverage.
 ## Project Structure
 
 ```
-incus-caddy-config/
-  cmd/caddy-config/     # CLI entry point
-  caddy/                # Route model, template rendering, and deployer
+incus-templated/
+  cmd/incus-templated/  # CLI entry point
+  templated/            # Target, template data, render, deploy, chain plugin
+  caddy/                # Caddy preset and template funcs
   test/                 # Tests and fixtures
   just/                 # justfile modules
 ```
 
 **Package Guidelines**:
 
-- `cmd/caddy-config/` - CLI flag parsing, command handlers, wiring only
-- `caddy/` - Route extraction from instance labels, Caddyfile template rendering,
-  in-container Caddy validation, atomic swap, and reload
+- `cmd/incus-templated/` - CLI flag parsing, config file, presets, wiring only
+- `templated/` - Instance data from labels, template rendering, staging,
+  format/validate commands, atomic swap, and reload. Knows nothing about Caddy
+- `caddy/` - Route extraction from instance labels into site blocks, exposed as
+  template funcs, and the `caddy` preset
 - Root package - No code at root level (all in packages)
 
 **Don't create**: deep nesting like `pkg/application/container/`, or abstraction
@@ -85,8 +88,8 @@ Everything runs through `just`; use it instead of raw `go`. `just --list` shows
 all available commands.
 
 ```bash
-just build                  # Build binary into bin/caddy-config
-just run <args>             # Run ./cmd/caddy-config
+just build                  # Build binary into bin/incus-templated
+just run <args>             # Run ./cmd/incus-templated
 
 just test-local [pattern]   # Unit only, no Incus needed
 just test [pattern]         # Unit + integration
@@ -166,7 +169,7 @@ func (t *logTerminal) Read(p []byte) (int, error) {
 
 ### CLI environment variables
 
-- Use `INCUS_CADDY_*` prefix for configuration env vars
+- Use `INCUS_TEMPLATED_*` prefix for configuration env vars
 - Support common standards like [no-color.org](https://no-color.org/) where
   applicable
 

@@ -1,10 +1,10 @@
-# incus-caddy-config
+# incus-templated
 
-[![CI](https://github.com/lxc/incus-caddy-config/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/lxc/incus-caddy-config/actions)
-[![Coverage 90%](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/lxc/incus-caddy-config/actions)
+[![CI](https://github.com/lxc/incus-templated/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/lxc/incus-templated/actions)
+[![Coverage 90%](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/lxc/incus-templated/actions)
 [![License Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Dynamic, zero-touch reverse proxy configuration for [Caddy](https://caddyserver.com/) on [Incus](https://linuxcontainers.org/incus/), driven by instance events via `ievent`.
+Render any Go template from [Incus](https://linuxcontainers.org/incus/) instance labels, and deploy it with optional format, validate and reload steps, driven by instance events via `ievent`. A [Caddy](https://caddyserver.com/) reverse proxy preset ships built in; Prometheus `file_sd` targets, HAProxy backends, or DNS zones are a template away.
 
 ```yaml
 services:
@@ -33,18 +33,18 @@ volumes:
 incus-compose up -d
 ```
 
-`caddy-config` watches your Incus fleet, discovers running instances, and configures reverse proxy routes into Caddy with zero manual configuration.
+With `--target edge,preset=caddy,instance=caddy,project=default`, `incus-templated` watches your Incus fleet, discovers running instances labeled `edge`, and configures reverse proxy routes into Caddy with zero manual configuration.
 
 ---
 
 ## How It Works
 
-`caddy-config` communicates with Incus exclusively over the Incus API (events, storage volume SFTP, and container exec):
+`incus-templated` communicates with Incus exclusively over the Incus API (events, storage volume SFTP, and container exec). With the Caddy preset:
 
 ```mermaid
 flowchart TD
     IncusDaemon["Incus Daemon (API & Events)"] -->|instance lifecycle events| Chain["ievent Chain<br/>(source &rarr; debounce &rarr; enricher)"]
-    Chain --> Plugin["caddy-config Controller"]
+    Chain --> Plugin["incus-templated Controller"]
 
     subgraph Storage["Incus Storage Pool"]
         Vol[("custom/caddy-config volume<br/>mounted to /config")]
@@ -56,29 +56,30 @@ flowchart TD
 
     Plugin -->|"1. Write staged config via SFTP"| Vol
     Plugin -->|"2. Exec 'caddy fmt'"| CaddyProc
-    Plugin -->|"3. Atomic rename (.Caddyfile.tmp &rarr; Caddyfile)"| Vol
+    Plugin -->|"3. Atomic rename (Caddyfile.tmp &rarr; Caddyfile)"| Vol
     Plugin -->|"4. Exec 'caddy reload'"| CaddyProc
 
     Vol -.->|mounted at /config| CaddyProc
 ```
 
 1. **Monitors Fleet**: Subscribes to the Incus event stream and tracks instances carrying target labels.
-2. **Direct Storage Volume SFTP**: Connects directly to the underlying Incus storage volume mounted at `/config` over SFTP (`conn.GetStoragePoolVolumeFileSFTP`).
-3. **Safe Validation & Formatting**: Renders Caddyfiles in-memory, stages to `/.Caddyfile.tmp`, and verifies/formats configuration syntax with `caddy fmt --overwrite`.
-4. **Atomic Swapping & Reload**: Atomically replaces `/config/Caddyfile` using `sftp.PosixRename` and reloads Caddy via container exec.
-5. **Reboot & Crash Survival**: If Caddy restarts or the host reboots, Caddy immediately starts up using the persisted configuration on the storage volume. If Caddy is stopped during reconcile, `caddy-config` stages directly onto the volume so it boots with the updated config on next start.
+2. **Direct Storage Volume SFTP**: Connects directly to the underlying Incus storage volume holding the target path over SFTP (`conn.GetStoragePoolVolumeFileSFTP`).
+3. **Safe Validation & Formatting**: Renders the template in-memory, stages to `<path>.tmp`, and runs the target's `format` and `validate` commands (`caddy fmt`, `caddy validate`).
+4. **Atomic Swapping & Reload**: Atomically replaces the file using `sftp.PosixRename` and runs the target's `reload` command (`caddy reload`) via container exec.
+5. **Reboot & Crash Survival**: If Caddy restarts or the host reboots, Caddy immediately starts up using the persisted configuration on the storage volume. If Caddy is stopped during reconcile, `incus-templated` stages directly onto the volume so it boots with the updated config on next start.
 
 ---
 
 ## Features
 
-- **Dual Deployment Modes**: Supports deploying to remote Caddy instances in Incus over SFTP (`--caddy-instance [label,]instance=<inst>,project=<proj>[,flags...]`), or local filesystem deployment alongside Caddy on the same OS, container, or VM (`--os-path [label,]path=<path>[,flags...]`). Targets are repeatable or comma/space-separated.
-- **Zero Admin Port Exposure**: Caddy's Admin API listens strictly on container loopback (`localhost:2019`). No admin port is published to the host or exposed to the network.
-- **Direct Storage Volume SFTP**: Writes directly to the underlying storage volume over the Incus API. `caddy-config` needs no local volume mount or host filesystem access.
+- **Any Template, Any Consumer**: Each target renders one Go template from the instances carrying its label: name, project, cluster location, labels, config, devices and addresses. Format, validate and reload are each optional commands, so a file watched by its consumer (Prometheus `file_sd`) needs none.
+- **Dual Deployment Modes**: Deploys into an Incus instance over SFTP (`--target <label>,instance=<inst>,project=<proj>`), or to the local filesystem (`--target <label>,path=<path>`). Targets are repeatable, comma/space-separated, or listed in a YAML `--config` file.
+- **Zero Admin Port Exposure**: With the Caddy preset, Caddy's Admin API listens strictly on container loopback (`localhost:2019`). No admin port is published to the host or exposed to the network.
+- **Direct Storage Volume SFTP**: Writes directly to the underlying storage volume over the Incus API. `incus-templated` needs no local volume mount or host filesystem access.
 - **Single Goroutine Concurrency**: Concurrency model strictly confined to a single goroutine (Rule A4). Zero mutexes, race-free event processing, and orderly reconciliation.
 - **Warm Gating**: Reconciliations are suppressed while the event chain is cold (`ChainCold`). Deployments only trigger after the initial fleet sweep completes (`ChainWarm`), eliminating route churn during daemon reconnects.
-- **Automatic Load Balancing**: Multiple instances sharing the same domain label are automatically aggregated and sorted into a single load-balanced `reverse_proxy` directive.
-- **Custom Vhost & Global Templating**: Supports custom site blocks via external template directories (`--templates-dir`) and overriding the global options block per target via custom template files (`global_template=<path>`).
+- **Automatic Load Balancing**: With the Caddy preset, multiple instances sharing the same domain label are automatically aggregated and sorted into a single load-balanced `reverse_proxy` directive.
+- **Custom Vhost Templating**: The Caddy preset supports custom site blocks per vhost from `--templates-dir` or inline, and a whole custom Caddyfile template per target.
 - **Observability**: Built-in HTTP endpoints on `:9153` for liveness (`/health`), fleet readiness (`/ready`), and Go runtime profiling (`/debug/pprof`).
 
 ---
@@ -88,7 +89,7 @@ flowchart TD
 ### 1. Generate an Incus Trust Token
 
 ```bash
-incus config trust add caddy-config
+incus config trust add incus-templated
 ```
 
 Save the token into `.env` (loaded automatically by `incus-compose` without `--os-env`):
@@ -115,8 +116,8 @@ services:
     command: |
       sh -c 'if [ ! -f /config/Caddyfile ]; then echo -e "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile; fi; exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
-  caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
+  incus-templated:
+    image: ghcr.io/jochumdev/incus-templated/incus-templated:1.0.0-beta.1
     restart: unless-stopped
     depends_on:
       caddy:
@@ -124,15 +125,15 @@ services:
     # ports:
     #   - "9153:9153"
     environment:
-      INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
-      INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_INSTANCES: "edge,instance=caddy-1,project=default"
-      INCUS_CADDY_HTTP_ADDRESS: ":9153"
-      INCUS_CADDY_LOG: "INFO"
+      INCUS_TEMPLATED_INCUS: "${INCUS_TEMPLATED_INCUS:-https://10.0.1.1:8443}"
+      INCUS_TEMPLATED_DATA_DIR: /var/lib/incus-templated
+      INCUS_TEMPLATED_TARGETS: "edge,preset=caddy,instance=caddy-1,project=default"
+      INCUS_TEMPLATED_HTTP_ADDRESS: ":9153"
+      INCUS_TEMPLATED_LOG: "INFO"
     secrets:
       - token
     volumes:
-      - caddy-config:/var/lib/caddy-config
+      - incus-templated:/var/lib/incus-templated
 
 secrets:
   token:
@@ -141,7 +142,7 @@ secrets:
 volumes:
   config:
   data:
-  caddy-config:
+  incus-templated:
 ```
 
 Start the stack:
@@ -176,9 +177,9 @@ curl -H "Host: web.example.test" http://127.0.0.1/
 
 ---
 
-## Instance Labels Reference
+## Caddy Labels Reference
 
-For a target bound to prefix `edge` (`--caddy-instance edge,instance=caddy,project=default` or `--os-path edge,path=/etc/caddy/Caddyfile`):
+For a Caddy target bound to prefix `edge` (`--target edge,preset=caddy,instance=caddy,project=default` or `--target edge,preset=caddy,path=/etc/caddy/Caddyfile`):
 
 | Label in `compose.yaml` | Description                                                                                                                           |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -194,16 +195,16 @@ Full documentation is available at [caddy.incus-compose.org](https://caddy.incus
 
 - **[Getting Started](https://caddy.incus-compose.org/getting-started)** - Installation, prerequisites, and first deployment
 - **[Architecture & Security](https://caddy.incus-compose.org/architecture)** - Process isolation, volume resolution, and concurrency model
-- **[Instance Labels & Routing](https://caddy.incus-compose.org/labels)** - Complete label specification and load balancing
-- **[Custom Vhost Templates](https://caddy.incus-compose.org/templates)** - Advanced site blocks, template variables, and examples
-- **[Configuration Reference](https://caddy.incus-compose.org/configuration)** - CLI flags, canonical `INCUS_CADDY_*` environment variables, and HTTP endpoints
+- **[Caddy Labels & Routing](https://caddy.incus-compose.org/labels)** - Complete label specification and load balancing
+- **[Templates](https://caddy.incus-compose.org/templates)** - Template data, funcs, Prometheus and cluster examples, and the Caddy preset
+- **[Configuration Reference](https://caddy.incus-compose.org/configuration)** - Targets, presets, the YAML config file, canonical `INCUS_TEMPLATED_*` environment variables, and HTTP endpoints
 - **[Deployment & Operations](https://caddy.incus-compose.org/deployment)** - Production compose stacks, reboot survival, and troubleshooting
 
 ---
 
 ## Support & Community
 
-- **Bug Reports & Issues**: [github.com/lxc/incus-caddy-config/issues](https://github.com/lxc/incus-caddy-config/issues)
+- **Bug Reports & Issues**: [github.com/lxc/incus-templated/issues](https://github.com/lxc/incus-templated/issues)
 - **Community Forum**: [discuss.linuxcontainers.org](https://discuss.linuxcontainers.org)
 
 ---

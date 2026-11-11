@@ -3,9 +3,9 @@
 version: 2
 
 builds:
-  - id: "caddy-config"
-    main: ./cmd/caddy-config
-    binary: caddy-config
+  - id: "incus-templated"
+    main: ./cmd/incus-templated
+    binary: incus-templated
     goos:
       - linux
       - darwin
@@ -23,9 +23,9 @@ builds:
       - CGO_ENABLED=0
 
 archives:
-  - id: "caddy-config"
+  - id: "incus-templated"
     ids:
-      - "caddy-config"
+      - "incus-templated"
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -47,19 +47,19 @@ changelog:
       - "^test:"
 
 dockers_v2:
-  - id: caddy-config
+  - id: incus-templated
     ids:
-      - "caddy-config"
+      - "incus-templated"
     dockerfile: Containerfile.goreleaser
     build_args:
       VERSION: "{{ .Version }}"
     images:
-      - "ghcr.io/jochumdev/incus-caddy-config/caddy-config"
+      - "ghcr.io/jochumdev/incus-templated/incus-templated"
     tags:
       - "{{ .Version }}"
       - "latest"
     annotations:
-      "org.opencontainers.image.description": "caddy-config - Dynamic Caddy configuration from Incus events"
+      "org.opencontainers.image.description": "incus-templated - Dynamic Caddy configuration from Incus events"
       "org.opencontainers.image.created": "{{.Date}}"
       "org.opencontainers.image.name": "{{.ProjectName}}"
       "org.opencontainers.image.revision": "{{.FullCommit}}"

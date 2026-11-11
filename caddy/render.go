@@ -1,19 +1,21 @@
+// Package caddy turns instance labels into Caddyfile site blocks, as template funcs and a preset.
 package caddy
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/jochumdev/incus-templated/templated"
 )
 
-// defaultBaseTemplate defines the global Caddyfile header.
-const defaultBaseTemplate = `{
-	admin localhost:2019
-}
-`
+//go:embed caddy.tmpl
+var presetTemplate string
 
 // defaultVhostTemplate defines the default reverse proxy or redirect site block.
 const defaultVhostTemplate = `{{ .Domain }} {
@@ -25,124 +27,42 @@ const defaultVhostTemplate = `{{ .Domain }} {
 }
 `
 
-// render renders the complete Caddyfile for a list of vhosts.
-func render(vhosts []vhost, templatesDir, globalTemplate string) ([]byte, error) {
-	var buf bytes.Buffer
-
-	defaultGlobalTmpl, err := template.New("default_global").Parse(defaultBaseTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("parsing default global template: %w", err)
+// Preset is the caddy target defaults; a field the target sets itself wins.
+func Preset() templated.Target {
+	return templated.Target{
+		Template: "caddy",
+		Text:     presetTemplate,
+		Path:     "/config/Caddyfile",
+		Format:   []string{"caddy", "fmt", "--overwrite", "{staging}"},
+		Validate: []string{"caddy", "validate", "--config", "{staging}"},
+		Reload:   []string{"caddy", "reload", "--config", "{path}", "--adapter", "caddyfile"},
 	}
-
-	globalTmpl := defaultGlobalTmpl
-	if globalTemplate != "" {
-		tmpl, err := loadGlobalTemplate(templatesDir, globalTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("loading global template: %w", err)
-		}
-
-		globalTmpl = tmpl
-	}
-
-	var globalBuf bytes.Buffer
-	err = globalTmpl.Execute(&globalBuf, map[string]any{
-		"Vhosts": vhosts,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("rendering global template: %w", err)
-	}
-
-	renderedGlobal := strings.TrimSpace(globalBuf.String())
-	if renderedGlobal != "" {
-		buf.WriteString(renderedGlobal)
-		buf.WriteString("\n")
-	}
-
-	defaultTmpl, err := template.New("default_vhost").Parse(defaultVhostTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("parsing default vhost template: %w", err)
-	}
-
-	for _, v := range vhosts {
-		tmpl, err := resolveTemplate(v, templatesDir, defaultTmpl)
-		if err != nil {
-			return nil, fmt.Errorf("resolving template for domain %q: %w", v.Domain, err)
-		}
-
-		var vhostBuf bytes.Buffer
-		err = tmpl.Execute(&vhostBuf, v)
-		if err != nil {
-			return nil, fmt.Errorf("rendering template for domain %q: %w", v.Domain, err)
-		}
-
-		rendered := strings.TrimSpace(vhostBuf.String())
-		if rendered != "" {
-			if buf.Len() > 0 {
-				buf.WriteString("\n")
-			}
-
-			buf.WriteString(rendered)
-			buf.WriteString("\n")
-		}
-	}
-
-	return buf.Bytes(), nil
 }
 
-// loadGlobalTemplate loads a custom global template from a file or templatesDir.
-func loadGlobalTemplate(templatesDir, globalTemplateFile string) (*template.Template, error) {
-	var candidates []string
-	if filepath.IsAbs(globalTemplateFile) {
-		candidates = []string{globalTemplateFile}
-		if filepath.Ext(globalTemplateFile) == "" {
-			candidates = append(candidates,
-				globalTemplateFile+".tmpl",
-				globalTemplateFile+".caddyfile",
-			)
-		}
-	} else {
-		if templatesDir != "" {
-			candidates = append(candidates, filepath.Join(templatesDir, globalTemplateFile))
-			if filepath.Ext(globalTemplateFile) == "" {
-				candidates = append(candidates,
-					filepath.Join(templatesDir, globalTemplateFile+".tmpl"),
-					filepath.Join(templatesDir, globalTemplateFile+".caddyfile"),
-				)
-			}
-		}
-		candidates = append(candidates, globalTemplateFile)
-		if filepath.Ext(globalTemplateFile) == "" {
-			candidates = append(candidates,
-				globalTemplateFile+".tmpl",
-				globalTemplateFile+".caddyfile",
-			)
-		}
-	}
+// Funcs are the template funcs vhosts, which groups a target's instances into site blocks, and vhost, which renders one.
+func Funcs(logger *slog.Logger, templatesDir string) template.FuncMap {
+	defaultTmpl := template.Must(template.New("default_vhost").Parse(defaultVhostTemplate))
 
-	var readErr error
-	for _, path := range candidates {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			if readErr == nil {
-				readErr = err
+	return template.FuncMap{
+		"vhosts": func(d templated.Data) []vhost {
+			return extractVhosts(logger, d.Label, d.Instances)
+		},
+		"vhost": func(v vhost) (string, error) {
+			tmpl, err := resolveTemplate(v, templatesDir, defaultTmpl)
+			if err != nil {
+				return "", fmt.Errorf("resolving template for domain %q: %w", v.Domain, err)
 			}
 
-			continue
-		}
+			var buf bytes.Buffer
 
-		tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
-		if err != nil {
-			return nil, fmt.Errorf("parsing global template file %q: %w", path, err)
-		}
+			err = tmpl.Execute(&buf, v)
+			if err != nil {
+				return "", fmt.Errorf("rendering template for domain %q: %w", v.Domain, err)
+			}
 
-		return tmpl, nil
+			return strings.TrimSpace(buf.String()), nil
+		},
 	}
-
-	if readErr != nil {
-		return nil, fmt.Errorf("reading global template file %q: %w", globalTemplateFile, readErr)
-	}
-
-	return nil, fmt.Errorf("reading global template file %q: %w", globalTemplateFile, os.ErrNotExist)
 }
 
 // resolveTemplate returns the template to use for a vhost.
@@ -174,7 +94,7 @@ func resolveTemplate(v vhost, templatesDir string, defaultTmpl *template.Templat
 				continue
 			}
 
-			tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
+			tmpl, err := template.New(filepath.Base(path)).Option("missingkey=zero").Parse(string(content))
 			if err != nil {
 				return nil, fmt.Errorf("parsing template file %q: %w", path, err)
 			}
@@ -189,8 +109,7 @@ func resolveTemplate(v vhost, templatesDir string, defaultTmpl *template.Templat
 		return nil, fmt.Errorf("reading template file %q: %w", v.Template, os.ErrNotExist)
 	}
 
-	// Else its an inline template.
-	tmpl, err := template.New("inline_" + v.Domain).Parse(v.Template)
+	tmpl, err := template.New("inline_" + v.Domain).Option("missingkey=zero").Parse(v.Template)
 	if err != nil {
 		return nil, fmt.Errorf("parsing inline template: %w", err)
 	}

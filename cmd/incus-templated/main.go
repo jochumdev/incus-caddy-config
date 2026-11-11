@@ -1,4 +1,4 @@
-// Command caddy-config reconciles Caddy reverse proxy configurations from Incus instance events.
+// Command incus-templated renders Go templates from Incus instance labels and deploys them.
 package main
 
 import (
@@ -24,7 +24,7 @@ import (
 	"github.com/lxc/incus-compose/shared"
 )
 
-const certName = "caddy-config"
+const certName = "incus-templated"
 
 const drainTimeout = 30 * time.Second
 
@@ -38,8 +38,8 @@ func main() {
 
 func command() *cli.Command {
 	return &cli.Command{
-		Name:  "caddy-config",
-		Usage: "Dynamic Caddy configuration from Incus events",
+		Name:  "incus-templated",
+		Usage: "Render templates from Incus instance labels and deploy them",
 		Commands: []*cli.Command{
 			runCommand(newConfig()),
 			versionCommand(),
@@ -50,57 +50,57 @@ func command() *cli.Command {
 func runCommand(cfg *config) *cli.Command {
 	return &cli.Command{
 		Name:  "run",
-		Usage: "Reconcile Caddy configurations from Incus events",
+		Usage: "Render and deploy targets from Incus events",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "incus",
 				Usage:       "URL of the Incus API",
 				Destination: &cfg.IncusURL,
-				Sources:     cli.EnvVars("INCUS_CADDY_INCUS"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_INCUS"),
 			},
 			&cli.StringFlag{
 				Name:        "server-fingerprint",
 				Usage:       "Server certificate SHA-256 fingerprint",
 				Destination: &cfg.ServerFingerprint,
-				Sources:     cli.EnvVars("INCUS_CADDY_SERVER_FINGERPRINT", "SERVER_FINGERPRINT"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_SERVER_FINGERPRINT", "SERVER_FINGERPRINT"),
 			},
 			&cli.StringFlag{
 				Name:        "token",
 				Usage:       "One-time trust token; a token file under --secrets-dir is read when this is empty",
 				Destination: &cfg.Token,
-				Sources:     cli.EnvVars("INCUS_CADDY_TOKEN"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_TOKEN"),
 			},
 			&cli.StringFlag{
 				Name:        "data-dir",
 				Usage:       "Persistent directory holding the enrolled certificate; empty keeps none",
 				Value:       defaultDataDir,
 				Destination: &cfg.DataDir,
-				Sources:     cli.EnvVars("INCUS_CADDY_DATA_DIR"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_DATA_DIR"),
 			},
 			&cli.StringFlag{
 				Name:        "secrets-dir",
 				Usage:       "Tmpfs directory holding the one-time trust token",
 				Value:       defaultSecretsDir,
 				Destination: &cfg.SecretsDir,
-				Sources:     cli.EnvVars("INCUS_CADDY_SECRETS_DIR"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_SECRETS_DIR"),
 			},
 			&cli.StringFlag{
 				Name:        "client-cert",
 				Usage:       "Certificate to present instead of enrolling; needs --client-key",
 				Destination: &cfg.ClientCert,
-				Sources:     cli.EnvVars("INCUS_CADDY_CLIENT_CERT"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_CLIENT_CERT"),
 			},
 			&cli.StringFlag{
 				Name:        "client-key",
 				Usage:       "Key for --client-cert",
 				Destination: &cfg.ClientKey,
-				Sources:     cli.EnvVars("INCUS_CADDY_CLIENT_KEY"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_CLIENT_KEY"),
 			},
 			&cli.BoolFlag{
 				Name:        "restricted",
 				Usage:       "Enroll a certificate confined to --project",
 				Destination: &cfg.Restricted,
-				Sources:     cli.EnvVars("INCUS_CADDY_RESTRICTED"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_RESTRICTED"),
 			},
 			&cli.StringFlag{
 				Name:        "remote",
@@ -112,98 +112,91 @@ func runCommand(cfg *config) *cli.Command {
 				Name:        "use-remote",
 				Usage:       "Allow the Incus CLI configuration to be used when there is no certificate and no token",
 				Destination: &cfg.UseRemote,
-				Sources:     cli.EnvVars("INCUS_CADDY_USE_REMOTE"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_USE_REMOTE"),
 			},
 			&cli.StringSliceFlag{
 				Name:        "project",
 				Usage:       "Project(s) to monitor for routed instances; empty means every visible project",
 				Destination: &cfg.Projects,
-				Sources:     cli.EnvVars("INCUS_CADDY_PROJECTS"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_PROJECTS"),
 			},
 			&TargetFlag{
-				Name:        "caddy-instance",
-				Usage:       "Target Caddy server in format '[label,]instance=<inst>,project=<proj>[,flags...]'; repeatable or comma/space-separated",
+				Name:        "target",
+				Usage:       "Target in format '<label>,(instance=<inst>,project=<proj>|path=<path>)[,preset=|template=][,format=|validate=|reload=][,flags...]'; repeatable or comma/space-separated",
 				Destination: &cfg.Targets,
-				Sources:     cli.EnvVars("INCUS_CADDY_INSTANCES"),
-			},
-			&TargetFlag{
-				Name:        "os-path",
-				Usage:       "Target local Caddyfile in format '[label,]path=<path>[,flags...]'; repeatable or comma/space-separated",
-				Destination: &cfg.OSTargets,
-				Sources:     cli.EnvVars("INCUS_CADDY_OS_PATHS"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_TARGETS"),
 			},
 			&cli.StringFlag{
-				Name:        "caddyfile-path",
-				Usage:       "Path to Caddyfile inside Caddy container",
-				Value:       defaultCaddyfilePath,
-				Destination: &cfg.CaddyfilePath,
-				Sources:     cli.EnvVars("INCUS_CADDY_CADDYFILE_PATH"),
+				Name:        "config",
+				Usage:       "YAML file holding more targets and templates_dir",
+				Destination: &cfg.ConfigFile,
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_CONFIG"),
 			},
 			&cli.StringFlag{
 				Name:        "templates-dir",
-				Usage:       "Directory containing custom vhost templates",
+				Usage:       "Directory relative template paths are resolved against",
 				Destination: &cfg.TemplatesDir,
-				Sources:     cli.EnvVars("INCUS_CADDY_TEMPLATES_DIR"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_TEMPLATES_DIR"),
 			},
 			&cli.DurationFlag{
 				Name:        "debounce-window",
 				Usage:       "How long a key must be quiet before the last of its burst is handed on",
 				Value:       defaultDebounceWindow,
 				Destination: &cfg.DebounceWindow,
-				Sources:     cli.EnvVars("INCUS_CADDY_DEBOUNCE_WINDOW"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_DEBOUNCE_WINDOW"),
 			},
 			&cli.StringFlag{
 				Name:        "http-address",
 				Usage:       "Address to serve /health and /ready on; empty disables it",
 				Value:       defaultHTTPAddr,
 				Destination: &cfg.HTTPAddr,
-				Sources:     cli.EnvVars("INCUS_CADDY_HTTP_ADDRESS"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_HTTP_ADDRESS"),
 			},
 			&cli.StringSliceFlag{
 				Name:        "exclude",
 				Usage:       "Chain position(s) to leave out; only optional ones",
 				Destination: &cfg.Exclude,
-				Sources:     cli.EnvVars("INCUS_CADDY_EXCLUDES"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_EXCLUDES"),
 			},
 			&cli.StringFlag{
 				Name:        "log",
 				Usage:       "Log level for the chain and process: TRACE, DEBUG, INFO, WARN, ERROR",
 				Destination: &cfg.Log,
-				Sources:     cli.EnvVars("INCUS_CADDY_LOG"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_LOG"),
 			},
 			&cli.BoolFlag{
 				Name:        "pprof",
 				Usage:       "Serve /debug/pprof on the --http-address; for profiling only",
 				Destination: &cfg.Pprof,
-				Sources:     cli.EnvVars("INCUS_CADDY_PPROF"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_PPROF"),
 			},
 			&cli.IntFlag{
 				Name:        "workers",
 				Usage:       "Incus reads in flight at once",
 				Value:       defaultWorkers,
 				Destination: &cfg.Workers,
-				Sources:     cli.EnvVars("INCUS_CADDY_WORKERS"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_WORKERS"),
 			},
 			&cli.DurationFlag{
 				Name:        "read-timeout",
 				Usage:       "Budget for one read of the daemon",
 				Value:       defaultReadTimeout,
 				Destination: &cfg.ReadTimeout,
-				Sources:     cli.EnvVars("INCUS_CADDY_READ_TIMEOUT"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_READ_TIMEOUT"),
 			},
 			&cli.DurationFlag{
 				Name:        "sweep-project-delay",
 				Usage:       "Gap between one project of a round and the next",
 				Value:       defaultProjectDelay,
 				Destination: &cfg.ProjectDelay,
-				Sources:     cli.EnvVars("INCUS_CADDY_SWEEP_PROJECT_DELAY"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_SWEEP_PROJECT_DELAY"),
 			},
 			&cli.DurationFlag{
 				Name:        "sweep-read-delay",
 				Usage:       "Gap between the reads inside one project",
 				Value:       defaultReadDelay,
 				Destination: &cfg.ReadDelay,
-				Sources:     cli.EnvVars("INCUS_CADDY_SWEEP_READ_DELAY"),
+				Sources:     cli.EnvVars("INCUS_TEMPLATED_SWEEP_READ_DELAY"),
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
@@ -222,7 +215,7 @@ func versionCommand() *cli.Command {
 		Name:  "version",
 		Usage: "Print version information",
 		Action: func(_ context.Context, _ *cli.Command) error {
-			fmt.Println("caddy-config version", version)
+			fmt.Println("incus-templated version", version)
 
 			return nil
 		},
@@ -249,14 +242,12 @@ func mainAction(ctx context.Context, args *mainActionArgs) error {
 		"pid", os.Getpid(),
 		"incus", args.endpoint(),
 		"http", args.HTTPAddr,
-		"caddyfile", args.CaddyfilePath,
 	)
 
 	logger.Debug("configuration",
 		"server_fingerprint", args.ServerFingerprint,
 		"projects", args.Projects,
 		"targets", args.Targets,
-		"os_targets", args.OSTargets,
 		"data_dir", args.DataDir,
 		"secrets_dir", args.SecretsDir,
 		"token", args.redactedToken(),

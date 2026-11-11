@@ -16,7 +16,8 @@ import (
 	"github.com/lxc/incus-compose/ievent/log"
 	"github.com/lxc/incus-compose/shared"
 
-	"github.com/jochumdev/incus-caddy-config/caddy"
+	"github.com/jochumdev/incus-templated/caddy"
+	"github.com/jochumdev/incus-templated/templated"
 )
 
 type position struct {
@@ -53,20 +54,18 @@ func chain(logger *slog.Logger, args *mainActionArgs) []position {
 			enricher.ReadTimeout(args.ReadTimeout),
 			enricher.ReadDelay(args.ReadDelay),
 			enricher.Project(serves(logger, args.Projects)),
-			enricher.Instance(servesInstance(logger, args.Targets, args.OSTargets)),
+			enricher.Instance(servesInstance(logger, args.Targets)),
 		)},
 	)
 
 	out = append(out, logAt(logger, args.Log, "enriched")...)
 
 	out = append(out,
-		position{plugin: caddy.New(
+		position{plugin: templated.New(
 			logger,
-			caddy.Config{
-				Targets:       args.Targets,
-				OSTargets:     args.OSTargets,
-				CaddyfilePath: args.CaddyfilePath,
-				TemplatesDir:  args.TemplatesDir,
+			templated.Config{
+				Targets: args.Targets,
+				Funcs:   caddy.Funcs(logger, args.TemplatesDir),
 			},
 		)},
 		position{plugin: http.New(logger, http.Listen(args.HTTPAddr), http.Pprof(args.Pprof)), optional: true},
@@ -143,13 +142,11 @@ func serves(logger *slog.Logger, projects []string) func(*incusapi.Project) bool
 	}
 }
 
-func servesInstance(logger *slog.Logger, targetLists ...[]caddy.Target) func(*incusapi.Instance) bool {
+func servesInstance(logger *slog.Logger, targets []templated.Target) func(*incusapi.Instance) bool {
 	var labels []string
-	for _, list := range targetLists {
-		for _, t := range list {
-			if !slices.Contains(labels, t.Label) {
-				labels = append(labels, t.Label)
-			}
+	for _, t := range targets {
+		if !slices.Contains(labels, t.Label) {
+			labels = append(labels, t.Label)
 		}
 	}
 	if len(labels) == 0 {
@@ -166,7 +163,9 @@ func servesInstance(logger *slog.Logger, targetLists ...[]caddy.Target) func(*in
 			cfg = inst.Config
 		}
 
-		serve := hasLabels(cfg, labels)
+		serve := slices.ContainsFunc(labels, func(label string) bool {
+			return templated.HasLabel(cfg, label)
+		})
 		if !serve {
 			logger.Debug("Not serving instance", "project", inst.Project, "instance", inst.Name)
 		} else {
@@ -175,18 +174,4 @@ func servesInstance(logger *slog.Logger, targetLists ...[]caddy.Target) func(*in
 
 		return serve
 	}
-}
-
-func hasLabels(cfg map[string]string, labels []string) bool {
-	for _, label := range labels {
-		exact := "user.label." + label
-		prefix := exact + "."
-		for k := range cfg {
-			if k == exact || strings.HasPrefix(k, prefix) {
-				return true
-			}
-		}
-	}
-
-	return false
 }

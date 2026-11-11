@@ -8,14 +8,14 @@ import (
 	incusapi "github.com/lxc/incus/v7/shared/api"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jochumdev/incus-caddy-config/caddy"
+	"github.com/jochumdev/incus-templated/templated"
 )
 
 func TestChainAssemble(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
-		Targets: []caddy.Target{
-			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+		Targets: []templated.Target{
+			{Label: "caddy", Project: "default", Instance: "caddy"},
 		},
 		HTTPAddr: ":9153",
 	}
@@ -35,7 +35,7 @@ func TestChainAssemble(t *testing.T) {
 	}
 	require.Contains(t, names, "debounce")
 	require.Contains(t, names, "enricher")
-	require.Contains(t, names, "caddy")
+	require.Contains(t, names, "templated")
 	require.Contains(t, names, "http")
 
 	// Exclude optional plugin http.
@@ -48,8 +48,8 @@ func TestChainAssemble(t *testing.T) {
 	require.NotContains(t, namesNoHTTP, "http")
 
 	// Excluding non-optional or unknown plugin fails.
-	_, _, err = assemble(positions, []string{"caddy"})
-	require.ErrorContains(t, err, "cannot exclude \"caddy\"")
+	_, _, err = assemble(positions, []string{"templated"})
+	require.ErrorContains(t, err, "cannot exclude \"templated\"")
 
 	_, _, err = assemble(positions, []string{"unknown"})
 	require.ErrorContains(t, err, "cannot exclude \"unknown\"")
@@ -72,8 +72,8 @@ func TestChainServes(t *testing.T) {
 func TestChainAssembleWithTrace(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	args := &mainActionArgs{
-		Targets: []caddy.Target{
-			caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+		Targets: []templated.Target{
+			{Label: "caddy", Project: "default", Instance: "caddy"},
 		},
 		HTTPAddr: ":9153",
 		Log:      "TRACE",
@@ -101,17 +101,17 @@ func TestChainServesInstance(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Nil when targets are empty.
-	require.Nil(t, servesInstance(logger, nil, nil))
-	require.Nil(t, servesInstance(logger, []caddy.Target{}, []caddy.Target{}))
+	require.Nil(t, servesInstance(logger, nil))
+	require.Nil(t, servesInstance(logger, []templated.Target{}))
 
-	targets := []caddy.Target{
-		caddy.NewTarget("caddy", map[string]string{"project": "default", "instance": "caddy"}),
+	targets := []templated.Target{
+		{Label: "caddy", Project: "default", Instance: "caddy"},
 	}
-	osTargets := []caddy.Target{
-		caddy.NewTarget("edge", map[string]string{"path": "/tmp/Caddyfile"}),
+	osTargets := []templated.Target{
+		{Label: "edge", Path: "/tmp/Caddyfile"},
 	}
 
-	fn := servesInstance(logger, targets, osTargets)
+	fn := servesInstance(logger, append(targets, osTargets...))
 	require.NotNil(t, fn)
 
 	// Nil instance.

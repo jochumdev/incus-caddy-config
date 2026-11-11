@@ -1,4 +1,4 @@
-package caddy
+package templated
 
 import (
 	"testing"
@@ -31,23 +31,23 @@ func TestResolveVolume(t *testing.T) {
 
 	t.Run("volume mounted at /config", func(t *testing.T) {
 		devices := map[string]map[string]string{
-			"caddy-config": {
+			"incus-templated": {
 				"type":   "disk",
 				"path":   "/config",
 				"pool":   "default",
-				"source": "my-caddy-config",
+				"source": "my-incus-templated",
 			},
 		}
 		vol := resolveVolume(devices, "/config/Caddyfile")
 		assert.NotNil(t, vol)
 		assert.Equal(t, "default", vol.pool)
-		assert.Equal(t, "my-caddy-config", vol.name)
+		assert.Equal(t, "my-incus-templated", vol.name)
 		assert.Equal(t, "/config", vol.mountPath)
 	})
 
 	t.Run("volume mounted at /etc/caddy", func(t *testing.T) {
 		devices := map[string]map[string]string{
-			"caddy-config": {
+			"incus-templated": {
 				"type":   "disk",
 				"path":   "/etc/caddy",
 				"pool":   "nvme",
@@ -75,7 +75,7 @@ func TestResolveVolume(t *testing.T) {
 
 	t.Run("disk with empty source", func(t *testing.T) {
 		devices := map[string]map[string]string{
-			"caddy-config": {
+			"incus-templated": {
 				"type":   "disk",
 				"path":   "/config",
 				"pool":   "default",

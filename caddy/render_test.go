@@ -1,11 +1,15 @@
 package caddy
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/jochumdev/incus-templated/templated"
 )
 
 func TestRendererDefaultVhost(t *testing.T) {
@@ -20,7 +24,7 @@ func TestRendererDefaultVhost(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, "", "")
+	content, err := render(vhosts, "")
 	require.NoError(t, err)
 
 	out := string(content)
@@ -45,7 +49,7 @@ func TestRendererCustomInlineTemplate(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, "", "")
+	content, err := render(vhosts, "")
 	require.NoError(t, err)
 
 	out := string(content)
@@ -70,7 +74,7 @@ func TestRendererCustomTemplateFile(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, tmpDir, "")
+	content, err := render(vhosts, tmpDir)
 	require.NoError(t, err)
 
 	out := string(content)
@@ -86,7 +90,7 @@ func TestRendererInvalidInlineTemplate(t *testing.T) {
 		},
 	}
 
-	_, err := render(vhosts, "", "")
+	_, err := render(vhosts, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "bad.example.com")
 }
@@ -104,7 +108,7 @@ func TestRendererInvalidTemplateFile(t *testing.T) {
 		},
 	}
 
-	_, err = render(vhosts, tmpDir, "")
+	_, err = render(vhosts, tmpDir)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "resolving template for domain \"broken.example.com\"")
 }
@@ -118,7 +122,7 @@ func TestRendererTemplateExecutionFailure(t *testing.T) {
 		},
 	}
 
-	_, err := render(vhosts, "", "")
+	_, err := render(vhosts, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "rendering template for domain \"fail.example.com\"")
 }
@@ -131,7 +135,7 @@ func TestRendererWhitespaceOnlyTemplate(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, "", "")
+	content, err := render(vhosts, "")
 	require.NoError(t, err)
 
 	// Whitespace-only block is not appended, only defaultBaseTemplate remains.
@@ -154,7 +158,7 @@ func TestRendererTemplateFilePathOr404(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, tmpDir, "")
+	content, err := render(vhosts, tmpDir)
 	require.NoError(t, err)
 
 	out := string(content)
@@ -167,7 +171,7 @@ func TestRendererTemplateFilePathOr404(t *testing.T) {
 			Template: "missing.caddyfile",
 		},
 	}
-	_, err = render(vhostsMissing, tmpDir, "")
+	_, err = render(vhostsMissing, tmpDir)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "reading template file")
 
@@ -182,51 +186,9 @@ func TestRendererTemplateFilePathOr404(t *testing.T) {
 			Template: absFile,
 		},
 	}
-	content, err = render(vhostsAbs, "", "")
+	content, err = render(vhostsAbs, "")
 	require.NoError(t, err)
 	require.Contains(t, string(content), "abs.example.com { abs_tmpl }")
-}
-
-func TestRendererGlobalTemplateWithVhostsContext(t *testing.T) {
-	tmpDir := t.TempDir()
-	globalFile := filepath.Join(tmpDir, "vhosts_global.caddyfile")
-	err := os.WriteFile(globalFile, []byte(`{
-	admin localhost:2019
-	# Total vhosts: {{ len .Vhosts }}
-}`), 0600)
-	require.NoError(t, err)
-
-	vhosts := []vhost{
-		{Domain: "a.example.com", Upstreams: []string{"10.0.1.1:80"}},
-		{Domain: "b.example.com", Upstreams: []string{"10.0.1.2:80"}},
-	}
-
-	content, err := render(vhosts, "", globalFile)
-	require.NoError(t, err)
-
-	out := string(content)
-	require.Contains(t, out, "# Total vhosts: 2")
-}
-
-func TestRendererInvalidGlobalTemplate(t *testing.T) {
-	tmpDir := t.TempDir()
-	globalFile := filepath.Join(tmpDir, "invalid_global.caddyfile")
-	err := os.WriteFile(globalFile, []byte("{{ unclosed"), 0600)
-	require.NoError(t, err)
-
-	vhosts := []vhost{{Domain: "app.example.com"}}
-
-	_, err = render(vhosts, "", globalFile)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "parsing global template file")
-}
-
-func TestRendererMissingGlobalTemplateFile(t *testing.T) {
-	vhosts := []vhost{{Domain: "app.example.com"}}
-
-	_, err := render(vhosts, "", "/nonexistent/global.caddyfile")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "reading global template file")
 }
 
 func TestRendererCustomTemplateWithFlags(t *testing.T) {
@@ -252,7 +214,7 @@ func TestRendererCustomTemplateWithFlags(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, "", "")
+	content, err := render(vhosts, "")
 	require.NoError(t, err)
 
 	out := string(content)
@@ -260,33 +222,6 @@ func TestRendererCustomTemplateWithFlags(t *testing.T) {
 	require.Contains(t, out, "tls internal")
 	require.Contains(t, out, `header Strict-Transport-Security "max-age=31536000"`)
 	require.Contains(t, out, "reverse_proxy 10.0.1.10:8443")
-}
-
-func TestRendererGlobalTemplateInTemplatesDir(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	err := os.WriteFile(filepath.Join(tmpDir, "external.caddyfile"), []byte("{\n\tadmin localhost:2019\n\t# external-global\n}"), 0600)
-	require.NoError(t, err)
-
-	err = os.WriteFile(filepath.Join(tmpDir, "internal.tmpl"), []byte("{\n\tadmin localhost:2019\n\t# internal-global\n}"), 0600)
-	require.NoError(t, err)
-
-	vhosts := []vhost{{Domain: "app.example.com", Upstreams: []string{"10.0.1.1:80"}}}
-
-	// Exact file name
-	content, err := render(vhosts, tmpDir, "external.caddyfile")
-	require.NoError(t, err)
-	require.Contains(t, string(content), "# external-global")
-
-	// Resolving .caddyfile extension
-	content, err = render(vhosts, tmpDir, "external")
-	require.NoError(t, err)
-	require.Contains(t, string(content), "# external-global")
-
-	// Resolving .tmpl extension
-	content, err = render(vhosts, tmpDir, "internal")
-	require.NoError(t, err)
-	require.Contains(t, string(content), "# internal-global")
 }
 
 func TestRendererRedirWithCustomTemplate(t *testing.T) {
@@ -305,10 +240,27 @@ func TestRendererRedirWithCustomTemplate(t *testing.T) {
 		},
 	}
 
-	content, err := render(vhosts, tmpDir, "")
+	content, err := render(vhosts, tmpDir)
 	require.NoError(t, err)
 
 	out := string(content)
 	require.Contains(t, out, "old.example.com {")
 	require.Contains(t, out, "redir https://example.com{uri} 301")
+}
+
+// render runs the shipped preset over vhosts as given, skipping extraction.
+func render(vhosts []vhost, templatesDir string) ([]byte, error) {
+	funcs := Funcs(nil, templatesDir)
+	funcs["vhosts"] = func(templated.Data) []vhost { return vhosts }
+
+	tmpl, err := template.New("caddy").Funcs(funcs).Parse(presetTemplate)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+
+	err = tmpl.Execute(&buf, templated.Data{})
+
+	return buf.Bytes(), err
 }

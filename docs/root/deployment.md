@@ -13,7 +13,7 @@ leafwiki_last_author_id: system
 
 # Deployment & Operations
 
-This guide covers operational practices for running `caddy-config` in production environments.
+This guide covers operational practices for running `incus-templated` in production environments.
 
 ---
 
@@ -22,10 +22,10 @@ This guide covers operational practices for running `caddy-config` in production
 Create a `.env` file alongside `compose.yaml` to provide the trust token (no `--os-env` needed):
 
 ```bash
-echo "INCUS_TOKEN=$(incus config trust add --quiet caddy-config)" > .env
+echo "INCUS_TOKEN=$(incus config trust add --quiet incus-templated)" > .env
 ```
 
-Here is the recommended production stack deploying Caddy alongside `caddy-config`:
+Here is the recommended production stack deploying Caddy alongside `incus-templated`:
 
 ```yaml
 services:
@@ -41,8 +41,8 @@ services:
     command: |
       sh -c 'if [ ! -f /config/Caddyfile ]; then echo -e "{\n\tadmin localhost:2019\n}\n:80 {\n\trespond \"Caddy initializing...\" 503\n}\n" > /config/Caddyfile; fi; exec caddy run --config /config/Caddyfile --adapter caddyfile'
 
-  caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
+  incus-templated:
+    image: ghcr.io/jochumdev/incus-templated/incus-templated:1.0.0-beta.1
     restart: unless-stopped
     depends_on:
       caddy:
@@ -50,15 +50,15 @@ services:
     ports:
       - "9153:9153"
     environment:
-      INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:-https://10.0.1.1:8443}"
-      INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_INSTANCES: "edge,instance=caddy-1,project=default"
-      INCUS_CADDY_HTTP_ADDRESS: ":9153"
-      INCUS_CADDY_LOG: "INFO"
+      INCUS_TEMPLATED_INCUS: "${INCUS_TEMPLATED_INCUS:-https://10.0.1.1:8443}"
+      INCUS_TEMPLATED_DATA_DIR: /var/lib/incus-templated
+      INCUS_TEMPLATED_TARGETS: "edge,preset=caddy,instance=caddy-1,project=default"
+      INCUS_TEMPLATED_HTTP_ADDRESS: ":9153"
+      INCUS_TEMPLATED_LOG: "INFO"
     secrets:
       - token
     volumes:
-      - caddy-config:/var/lib/caddy-config
+      - incus-templated:/var/lib/incus-templated
 
 secrets:
   token:
@@ -67,17 +67,17 @@ secrets:
 volumes:
   config:
   data:
-  caddy-config:
+  incus-templated:
 ```
 
 ### Purpose of Each Volume
 
 1. **`config:/config`**:
-   Persistent Incus custom storage volume holding `/config/Caddyfile`. `caddy-config` connects directly to this volume over SFTP to write and update the configuration.
+   Persistent Incus custom storage volume holding `/config/Caddyfile`. `incus-templated` connects directly to this volume over SFTP to write and update the configuration.
 2. **`data:/data`**:
    Persistent volume where Caddy stores automatic TLS certificates (from Let's Encrypt / ZeroSSL) and OCSP stapling cache.
-3. **`caddy-config:/var/lib/caddy-config`**:
-   Stores `caddy-config`'s enrolled client TLS certificate (`client.crt`, `client.key`) so trust tokens are only needed once.
+3. **`incus-templated:/var/lib/incus-templated`**:
+   Stores `incus-templated`'s enrolled client TLS certificate (`client.crt`, `client.key`) so trust tokens are only needed once.
 
 ---
 
@@ -88,13 +88,13 @@ volumes:
 Because `/config` is backed by a custom storage volume:
 
 - When the Caddy container restarts (`incus-compose restart caddy`) or the Incus host reboots, Caddy immediately starts up using the persisted `Caddyfile` on the volume.
-- Traffic continues to be served immediately on boot without waiting for `caddy-config` to initialize.
+- Traffic continues to be served immediately on boot without waiting for `incus-templated` to initialize.
 
 ### Offline / Cold Reconciliations
 
 If Caddy is temporarily stopped (e.g. during maintenance or image upgrades):
 
-1. `caddy-config` detects the container is stopped.
+1. `incus-templated` detects the container is stopped.
 2. It resolves the storage volume mounted at `/config` and writes the updated `Caddyfile` directly to the volume via SFTP.
 3. Because Caddy is not running, in-container validation and reload are skipped.
 4. When Caddy starts up, it reads the updated configuration from the storage volume on its first boot cycle.
@@ -103,13 +103,13 @@ If Caddy is temporarily stopped (e.g. during maintenance or image upgrades):
 
 ## Multi-Project Routing
 
-By default, `caddy-config` monitors all visible Incus projects. You can restrict monitoring to specific projects:
+By default, `incus-templated` monitors all visible Incus projects. You can restrict monitoring to specific projects:
 
 ```bash
-caddy-config run \
+incus-templated run \
   --project prod \
   --project staging \
-  --caddy-instance edge,instance=caddy,project=default
+  --target edge,preset=caddy,instance=caddy,project=default
 ```
 
 ### Multiple Caddy Servers
@@ -118,13 +118,13 @@ You can route different services to different Caddy instances using separate lab
 
 ```bash
 # Repeated flags
-caddy-config run \
-  --caddy-instance public,instance=caddy-external,project=default \
-  --caddy-instance internal,instance=caddy-internal,project=default
+incus-templated run \
+  --target public,preset=caddy,instance=caddy-external,project=default \
+  --target internal,preset=caddy,instance=caddy-internal,project=default
 
 # Or comma-separated
-caddy-config run \
-  --caddy-instance "public,instance=caddy-external,project=default,internal,instance=caddy-internal,project=default"
+incus-templated run \
+  --target "public,preset=caddy,instance=caddy-external,project=default,internal,preset=caddy,instance=caddy-internal,project=default"
 ```
 
 - Instances tagged with `user.label.public` route to `caddy-external`.
@@ -144,10 +144,10 @@ incus-compose exec caddy cat /config/Caddyfile
 
 ### 2. Check Controller Logs
 
-Increase log verbosity using `INCUS_CADDY_LOG=DEBUG` or `TRACE`:
+Increase log verbosity using `INCUS_TEMPLATED_LOG=DEBUG` or `TRACE`:
 
 ```bash
-incus-compose logs -f caddy-config
+incus-compose logs -f incus-templated
 ```
 
 `DEBUG` logs display:
