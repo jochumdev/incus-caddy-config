@@ -87,4 +87,4 @@ jobs:
       - name: Build binary
         run: |
           just build
-          ./bin/caddy-config version
+          ./bin/incus-templated version

@@ -1,10 +1,10 @@
 name: caddy-stack
 
-# Single Caddy + caddy-config stack for incus-compose.
+# Single Caddy + incus-templated stack for incus-compose.
 #
 # Usage with trust token:
-#   1. Mint a trust token for caddy-config:
-#      echo "INCUS_TOKEN=$(incus config trust add --quiet caddy-config)" > .env
+#   1. Mint a trust token for incus-templated:
+#      echo "INCUS_TOKEN=$(incus config trust add --quiet incus-templated)" > .env
 #   2. Start the stack:
 #      incus-compose up -d
 #
@@ -28,28 +28,27 @@ services:
     networks:
       - default
 
-  caddy-config:
-    image: ghcr.io/jochumdev/incus-caddy-config/caddy-config:1.0.0-beta.1
+  incus-templated:
+    image: ghcr.io/jochumdev/incus-templated/incus-templated:1.0.0-beta.1
     build:
       context: .
       dockerfile: Containerfile
-    container_name: caddy-config
+    container_name: incus-templated
     restart: unless-stopped
     depends_on:
       caddy:
         condition: service_healthy
     environment:
-      INCUS_CADDY_INCUS: "${INCUS_CADDY_INCUS:?Incus HTTPS API endpoint is required, e.g. https://10.0.0.1:8443}"
-      INCUS_CADDY_INSTANCES: "${CADDY_LABEL:-caddy},instance=caddy,project=${INCUS_PROJECT:-default}"
-      INCUS_CADDY_CADDYFILE_PATH: /config/Caddyfile
-      INCUS_CADDY_DATA_DIR: /var/lib/caddy-config
-      INCUS_CADDY_SECRETS_DIR: /run/secrets
-      INCUS_CADDY_HTTP_ADDRESS: :9153
-      INCUS_CADDY_LOG: "${INCUS_CADDY_LOG:-INFO}"
+      INCUS_TEMPLATED_INCUS: "${INCUS_TEMPLATED_INCUS:?Incus HTTPS API endpoint is required, e.g. https://10.0.0.1:8443}"
+      INCUS_TEMPLATED_TARGETS: "${CADDY_LABEL:-caddy},preset=caddy,instance=caddy,project=${INCUS_PROJECT:-default}"
+      INCUS_TEMPLATED_DATA_DIR: /var/lib/incus-templated
+      INCUS_TEMPLATED_SECRETS_DIR: /run/secrets
+      INCUS_TEMPLATED_HTTP_ADDRESS: :9153
+      INCUS_TEMPLATED_LOG: "${INCUS_TEMPLATED_LOG:-INFO}"
     secrets:
       - token
     volumes:
-      - caddy-config:/var/lib/caddy-config
+      - incus-templated:/var/lib/incus-templated
     networks:
       - default
 
@@ -60,7 +59,7 @@ secrets:
 volumes:
   config:
   data:
-  caddy-config:
+  incus-templated:
 
 networks:
   default:

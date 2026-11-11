@@ -136,7 +136,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/jochumdev/incus-caddy-config
+        - github.com/jochumdev/incus-templated
   exclusions:
     generated: lax
     paths:

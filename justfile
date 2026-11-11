@@ -1,7 +1,7 @@
-# incus-caddy-config development commands
+# incus-templated development commands
 #
 # Quick start:
-#   just run <args>     # Run caddy-config
+#   just run <args>     # Run incus-templated
 #   just test-local     # Run local unit tests
 #   just fix            # Auto-fix linting issues
 
