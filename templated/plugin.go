@@ -1,29 +1,30 @@
-// Package caddy generates and deploys Caddy configurations from Incus instance labels.
-package caddy
+// Package templated renders Go templates from Incus instance labels and deploys the result.
+package templated
 
 import (
 	"context"
 	"log/slog"
-	"strings"
+	"maps"
+	"text/template"
 
 	"github.com/lxc/incus-compose/iclient"
 	"github.com/lxc/incus-compose/ievent/iutil"
 )
 
-const name = "caddy"
+const name = "templated"
 
 const defaultInboxSize = 256
 
-// Config configures the Caddy event plugin.
+// Config configures the plugin.
 type Config struct {
-	Targets       []Target
-	OSTargets     []Target
-	CaddyfilePath string
-	TemplatesDir  string
-	InboxSize     int
+	Targets []Target
+
+	// Funcs are added to every target's template, over the generic ones.
+	Funcs     template.FuncMap
+	InboxSize int
 }
 
-// Plugin consumes enriched instance events and deploys Caddyfiles to target instances.
+// Plugin consumes enriched instance events and deploys each target's rendered template.
 type Plugin struct {
 	logger *slog.Logger
 	cfg    Config
@@ -42,7 +43,7 @@ type Plugin struct {
 
 var _ iutil.Plugin = (*Plugin)(nil)
 
-// New constructs a new Caddy plugin.
+// New constructs a new plugin.
 func New(logger *slog.Logger, cfg Config) *Plugin {
 	inboxSize := cfg.InboxSize
 	if inboxSize <= 0 {
@@ -116,7 +117,7 @@ func (p *Plugin) Handle(ev *iutil.Event) {
 	select {
 	case p.inbox <- ev:
 	default:
-		p.logger.Warn("Caddy plugin inbox full; dropping event", "action", ev.Action(), "name", ev.Name())
+		p.logger.Warn("inbox full; dropping event", "action", ev.Action(), "name", ev.Name())
 	}
 
 	p.next(ev)
@@ -127,7 +128,7 @@ func (p *Plugin) Wait() {
 	p.deploy.wg.Wait()
 }
 
-// Run processes queued events and reconciles Caddyfiles until the context is canceled.
+// Run processes queued events and reconciles targets until the context is canceled.
 func (p *Plugin) Run(ctx context.Context) error {
 	defer cancelAll(p.deploy.cancels)
 
@@ -204,27 +205,10 @@ func (p *Plugin) processEvent(ctx context.Context, ev *iutil.Event) {
 }
 
 func (p *Plugin) hasTargetLabels(inst *iutil.Instance) bool {
-	if inst == nil {
-		return false
-	}
-
+	config := maps.Collect(inst.Config())
 	for _, target := range p.cfg.Targets {
-		exact := "user.label." + target.Label
-		prefix := exact + "."
-		for k := range inst.Config() {
-			if k == exact || strings.HasPrefix(k, prefix) {
-				return true
-			}
-		}
-	}
-
-	for _, target := range p.cfg.OSTargets {
-		exact := "user.label." + target.Label
-		prefix := exact + "."
-		for k := range inst.Config() {
-			if k == exact || strings.HasPrefix(k, prefix) {
-				return true
-			}
+		if HasLabel(config, target.Label) {
+			return true
 		}
 	}
 
@@ -248,5 +232,5 @@ func (p *Plugin) reconcile(ctx context.Context) {
 		instances = append(instances, ev)
 	}
 
-	reconcileDeployments(ctx, p.deploy, p.logger, p.conn, p.cfg, instances)
+	reconcileDeployments(ctx, p.deploy, p.logger, p.conn, p.cfg.Targets, p.cfg.Funcs, instances)
 }
