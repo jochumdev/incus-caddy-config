@@ -5,7 +5,7 @@ go 1.27.4
 require (
 	github.com/KimMachineGun/automemlimit v1.0.1
 	github.com/avast/retry-go/v5 v5.1.1
-	github.com/lxc/incus-compose v1.3.4-0.20261002041938-13b1b7a445dc
+	github.com/lxc/incus-compose v1.4.1-0.20261111223833-096198e96860
 	github.com/lxc/incus/v7 v7.6.0
 	github.com/pkg/sftp v1.13.12
 	github.com/stretchr/testify v1.12.1
@@ -41,5 +41,3 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	oras.land/oras-go/v2 v2.7.0 // indirect
 )
-
-replace github.com/lxc/incus-compose => ../incus-compose
