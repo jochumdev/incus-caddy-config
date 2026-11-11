@@ -1,47 +1,38 @@
 ---
-description: Reference guide for configuring dynamic Caddy reverse proxy routes using Incus instance labels.
+description: Reference guide for the Caddy preset: reverse proxy routes from Incus instance labels.
 editor: markdown
 published: true
-title: Instance Labels & Routing
+title: Caddy Labels & Routing
 leafwiki_id: erZCvElDR
-leafwiki_title: Instance Labels & Routing
+leafwiki_title: Caddy Labels & Routing
 leafwiki_created_at: "2026-09-15T22:05:21Z"
 leafwiki_updated_at: "2026-09-15T22:05:21Z"
 leafwiki_creator_id: system
 leafwiki_last_author_id: system
 ---
 
-# Instance Labels & Routing
+# Caddy Labels & Routing
 
-`caddy-config` derives routing rules from labels assigned to Incus containers and virtual machines.
+The Caddy preset derives routing rules from labels assigned to Incus containers and virtual machines. Other templates read labels directly; see [Templates](templates).
 
 ---
 
 ## Target Binding Syntax
 
-`caddy-config` connects a label prefix to a target Caddy server using `--caddy-instance` (for Incus containers/VMs) or `--os-path` (for local OS deployment):
+These labels are read by the Caddy preset. A `--target` with `preset=caddy` binds a label prefix to a Caddy server (see [Configuration](configuration#targets)):
 
-```text
---caddy-instance [<label>,]instance=<instance>,project=<project>[,<key>=<value>...]
---os-path [<label>,]path=<path>[,<key>=<value>...]
-```
-
-For example:
 ```bash
-# Remote Incus instance
---caddy-instance edge,instance=caddy-prod,project=default
+# Caddy in an Incus container
+--target edge,preset=caddy,instance=caddy-prod,project=default
 
-# Remote Incus instance with custom flags (e.g. global template)
---caddy-instance edge,instance=caddy-prod,project=default,global_template=/etc/caddy/global.caddyfile
+# Caddy on the local OS
+--target edge,preset=caddy,path=/etc/caddy/Caddyfile
 
-# Local OS Caddyfile (defaults to label "caddy")
---os-path path=/etc/caddy/Caddyfile
-
-# Local OS Caddyfile with custom label prefix and reload flag
---os-path edge,path=/etc/caddy/Caddyfile,reload=custom
+# Your own global block, the preset's commands
+--target edge,preset=caddy,instance=caddy-prod,project=default,template=edge.caddyfile
 ```
 
-Targets can be specified multiple times, or comma- or whitespace-separated within a single flag or environment variable, to route different subsets of services to distinct Caddy targets.
+Targets can be repeated, or comma- or whitespace-separated within a single flag or `INCUS_TEMPLATED_TARGETS`, to route different subsets of services to distinct Caddy servers.
 
 ---
 
@@ -71,7 +62,7 @@ For a target bound to prefix `edge`:
 
 ## Structured Labels Format
 
-As an alternative to compressed single-string label values, `caddy-config` supports a structured label format using individual key-value pairs:
+As an alternative to compressed single-string label values, `incus-templated` supports a structured label format using individual key-value pairs:
 
 ```yaml
 services:
@@ -115,12 +106,12 @@ For target label `<L>` and route index `<n>` (non-negative integer):
 
 ## IPv4 Address Resolution
 
-`caddy-config` resolves upstream container IP addresses dynamically:
+`incus-templated` resolves upstream container IP addresses dynamically:
 
 1. **Target Network Matching**:
-   If the `network` flag is set on the target label (e.g. `,network=internal` or `user.label.<prefix>.network`), `caddy-config` searches the instance's interfaces for one attached to `internal` and selects its first non-loopback IPv4 address.
+   If the `network` flag is set on the target label (e.g. `,network=internal` or `user.label.<prefix>.network`), `incus-templated` searches the instance's interfaces for one attached to `internal` and selects its first non-loopback IPv4 address.
 2. **First Available Non-Loopback IPv4**:
-   If no network is specified (or the specified network is not attached), `caddy-config` selects the first non-loopback IPv4 address across all attached interfaces.
+   If no network is specified (or the specified network is not attached), `incus-templated` selects the first non-loopback IPv4 address across all attached interfaces.
 3. **Loopback & Invalid Address Exclusion**:
    Addresses matching `127.0.0.0/8` (loopback) or unparseable IP addresses are automatically skipped.
 
@@ -168,7 +159,7 @@ portal.example.com app.example.com {
 
 ### 3. Automatic Load Balancing (Multiple Replicas)
 
-When multiple instances define the same `edge` target label, `caddy-config` merges their upstreams into a single sorted load-balanced `reverse_proxy` directive:
+When multiple instances define the same `edge` target label, `incus-templated` merges their upstreams into a single sorted load-balanced `reverse_proxy` directive:
 
 ```yaml
 services:
@@ -192,7 +183,7 @@ api.example.com {
 }
 ```
 
-If `api1` stops, `caddy-config` detects the stop event and updates Caddy to route solely to `api2`. When `api1` restarts, it is automatically restored to the pool.
+If `api1` stops, `incus-templated` detects the stop event and updates Caddy to route solely to `api2`. When `api1` restarts, it is automatically restored to the pool.
 
 ### 4. Canonical Domain Redirect
 

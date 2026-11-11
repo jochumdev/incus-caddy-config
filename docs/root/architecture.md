@@ -13,19 +13,19 @@ leafwiki_last_author_id: system
 
 # Architecture & Security
 
-`caddy-config` is designed around strict process isolation, single-goroutine state confinement, and direct storage volume manipulation over the Incus API.
+`incus-templated` is designed around strict process isolation, single-goroutine state confinement, and direct storage volume manipulation over the Incus API.
 
 ---
 
 ## Two-Process Security Model
 
-`caddy-config` separates control-plane responsibilities from the data plane across two isolated processes:
+`incus-templated` separates control-plane responsibilities from the data plane across two isolated processes:
 
 ```mermaid
 flowchart TD
     subgraph ControlPlane["Control Plane (Private)"]
-        CC["caddy-config Controller"]
-        Credentials[("Incus Client Certificate<br/>(/var/lib/caddy-config)")]
+        CC["incus-templated Controller"]
+        Credentials[("Incus Client Certificate<br/>(/var/lib/incus-templated)")]
         CC --- Credentials
     end
 
@@ -38,7 +38,7 @@ flowchart TD
     IncusDaemon["Incus Daemon API<br/>(HTTPS / Unix Socket)"]
 
     CC -->|"1. Subscribes to events<br/>2. Discovers instances"| IncusDaemon
-    CC -->|"3. SFTP directly to storage volume"| StorageVolume[("Incus Storage Volume<br/>(caddy-config)")]
+    CC -->|"3. SFTP directly to storage volume"| StorageVolume[("Incus Storage Volume<br/>(incus-templated)")]
     CC -->|"4. Exec 'caddy fmt' & 'caddy reload'"| Caddy
 
     StorageVolume -.->|mounted at /config| Caddy
@@ -46,7 +46,7 @@ flowchart TD
 
 ### Process Separation Boundaries
 
-| Property | `caddy-config` | `caddy` |
+| Property | `incus-templated` | `caddy` |
 |---|---|---|
 | **Role** | Control-plane event listener & config reconciler | Data-plane HTTP/HTTPS reverse proxy |
 | **Network Exposure** | None (internal `:9153` healthcheck only) | Public ports `80` and `443` |
@@ -60,13 +60,13 @@ Because Caddy holds no Incus credentials and its Admin API is bound strictly to 
 
 ## Storage Volume Resolution & Direct SFTP Deployer
 
-Caddy persists its configuration in an Incus custom storage volume (e.g. `caddy-config` mounted to `/config`).
+Caddy persists its configuration in an Incus custom storage volume (e.g. `incus-templated` mounted to `/config`).
 
-Rather than requiring `caddy-config` to mount the storage volume locally on the host or in its own container, `caddy-config` communicates entirely through the Incus API:
+Rather than requiring `incus-templated` to mount the storage volume locally on the host or in its own container, `incus-templated` communicates entirely through the Incus API:
 
 ```mermaid
 sequenceDiagram
-    participant P as caddy-config Plugin
+    participant P as incus-templated Plugin
     participant API as Incus API
     participant Vol as Incus Storage Volume
     participant C as Caddy Container
@@ -83,18 +83,18 @@ sequenceDiagram
         API-->>P: sftp.Client (container root)
     end
 
-    P->>Vol: Create & write /.Caddyfile.tmp
+    P->>Vol: Create & write /Caddyfile.tmp
     
     alt Container is Running
-        P->>API: ExecInstance("caddy fmt --overwrite /.Caddyfile.tmp")
+        P->>API: ExecInstance("caddy fmt --overwrite /Caddyfile.tmp")
         API->>C: caddy fmt --overwrite
         C-->>API: exit code 0
         API-->>P: Formatting and validation succeeded
-        P->>Vol: sftp.PosixRename("/.Caddyfile.tmp", "/Caddyfile")
+        P->>Vol: sftp.PosixRename("/Caddyfile.tmp", "/Caddyfile")
         P->>API: ExecInstance("caddy reload --config /config/Caddyfile")
         API->>C: caddy reload
     else Container is Stopped (Cold Staging)
-        P->>Vol: sftp.PosixRename("/.Caddyfile.tmp", "/Caddyfile")
+        P->>Vol: sftp.PosixRename("/Caddyfile.tmp", "/Caddyfile")
         Note over P,Vol: Staged directly onto volume.<br/>Caddy boots with valid config on start.
     end
 ```
@@ -102,27 +102,26 @@ sequenceDiagram
 ### Key Deployment Invariants
 
 1. **Volume Resolution (`resolveVolume`)**:
-   `deploy()` inspects the instance's expanded devices to locate a disk device whose mount path matches the parent directory of `--caddyfile-path` (default `/config`). It extracts the `pool` and volume `source` name.
+   `deploy()` inspects the instance's expanded devices to locate a disk device whose mount path matches the parent directory of the target `path` (default `/config` with the Caddy preset). It extracts the `pool` and volume `source` name.
 2. **Cold Staging (Reboot & Crash Survival)**:
-   If Caddy is stopped, `caddy-config` still updates the Caddyfile on the storage volume. When Caddy starts up or reboots, it reads the updated configuration immediately.
+   If Caddy is stopped, `incus-templated` still updates the Caddyfile on the storage volume. When Caddy starts up or reboots, it reads the updated configuration immediately.
 3. **Atomic Swapping**:
-   `caddy-config` never writes directly over the active `Caddyfile`. It writes to `/.Caddyfile.tmp` and only renames via `sftp.PosixRename` after in-container formatting and syntax validation succeeds.
+   `incus-templated` never writes directly over the active `Caddyfile`. It writes to `<path>.tmp` and only renames via `sftp.PosixRename` after the target's `format` and `validate` commands succeed in-container.
 4. **Validation Isolation**:
-   If an invalid route or template syntax error occurs, `caddy fmt` fails in-container. The temporary file is removed, and the active `Caddyfile` remains completely untouched.
+   If an invalid route or template syntax error occurs, rendering or a check command fails. The active file remains completely untouched.
 
-### Co-located OS Deployment (`--os-path`)
+### Local Deployment (`--target <label>,path=<path>`)
 
-When `caddy-config` runs alongside Caddy on the same host, container, or VM:
+When `incus-templated` runs alongside Caddy on the same host, container, or VM:
 - **Filesystem Staging**: Writes directly to `.<base>.tmp` in the target directory and atomically swaps via `os.Rename`.
-- **Local Validation**: Executes `caddy fmt --overwrite <staging>` on the local machine.
-- **Local Reload**: Executes `caddy reload --config <path> --adapter caddyfile`. If the Caddy daemon is offline during boot, the file remains deployed on disk for Caddy's startup.
-- **Unified Event Pipeline**: Reconciles alongside remote `--caddy-instance` targets within the exact same single-goroutine loop.
+- **Local Commands**: Runs the target's `format`, `validate` and `reload` on the local machine. A failed reload is retried; the file is already in place for the next start.
+- **Unified Event Pipeline**: Reconciles alongside instance targets within the exact same single-goroutine loop.
 
 ---
 
 ## Concurrency Model: Single Goroutine Confinement (Rule A4)
 
-All state in `caddy.Plugin` (`instances`, `lastDeployed`, `chain`) is strictly confined to `p.Run(ctx)`'s single goroutine:
+All state in `templated.Plugin` (`instances`, `lastDeployed`, `chain`) is strictly confined to `p.Run(ctx)`'s single goroutine:
 
 ```mermaid
 flowchart LR
@@ -153,11 +152,11 @@ flowchart LR
 
 ## Warm Gating on Chain State
 
-`caddy-config` coordinates with the `ievent` enricher to avoid flapping routes during startup or daemon reconnection:
+`incus-templated` coordinates with the `ievent` enricher to avoid flapping routes during startup or daemon reconnection:
 
 - **Cold State (`iutil.ChainCold`)**:
   When the process starts, the enricher performs an initial fleet sweep of all monitored projects. During this sweep, instance events are recorded into `p.instances`, but **all Caddy deployments are gated and paused**.
 - **Warm State (`iutil.ChainWarm`)**:
-  Once the sweep finishes, the enricher emits `ActionSweepEnd`. `caddy-config` transitions to `ChainWarm` and performs a single initial `reconcile()` deploying the complete routing table.
+  Once the sweep finishes, the enricher emits `ActionSweepEnd`. `incus-templated` transitions to `ChainWarm` and performs a single initial `reconcile()` deploying the complete routing table.
 - **Disconnection Handling**:
-  If the Incus event stream disconnects, the state drops to `ChainCold`. Caddy retains its last known good configuration on the storage volume while `caddy-config` reconnects and re-synchronizes the fleet.
+  If the Incus event stream disconnects, the state drops to `ChainCold`. Caddy retains its last known good configuration on the storage volume while `incus-templated` reconnects and re-synchronizes the fleet.
